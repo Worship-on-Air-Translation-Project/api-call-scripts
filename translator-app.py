@@ -3,12 +3,12 @@ import time
 import os
 from dotenv import load_dotenv
 
-# Step 1: Load environment variables
+#  Load environment variables
 load_dotenv()
 speech_key = os.getenv("SPEECH_KEY")
 speech_region = os.getenv("SPEECH_REGION")
 
-# Step 2: Set up speech translation config
+# Set up speech translation config
 translation_config = speechsdk.translation.SpeechTranslationConfig(
     subscription=speech_key,
     region=speech_region
@@ -18,7 +18,7 @@ translation_config = speechsdk.translation.SpeechTranslationConfig(
 translation_config.speech_recognition_language = "en-US"
 translation_config.add_target_language("ko")  # You can add more if needed
 
-# Step 3: Set up recognizer using default microphone
+# Set up recognizer using default microphone
 audio_config = speechsdk.audio.AudioConfig(use_default_microphone=True)
 translator = speechsdk.translation.TranslationRecognizer(
     translation_config=translation_config,
@@ -27,7 +27,7 @@ translator = speechsdk.translation.TranslationRecognizer(
 
 print("Speak a sentence in English. Press Ctrl+C to stop.\n")
 
-# Step 4: Main recognition loop
+# Main recognition loop
 try:
     while True:
         print("Listening...")
@@ -54,7 +54,7 @@ try:
                 print(f"Error details: {cancellation_details.error_details}")
             break
 
-        time.sleep(0.3)  # Slight delay to debounce loop
+        time.sleep(0.3)
 
 except KeyboardInterrupt:
     print("\nTranslation session ended by user.")
