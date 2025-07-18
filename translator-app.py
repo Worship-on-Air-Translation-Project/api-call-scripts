@@ -1,89 +1,60 @@
-import requests, uuid, json
-import time, os
-from dotenv import load_dotenv
 import azure.cognitiveservices.speech as speechsdk
+import time
+import os
+from dotenv import load_dotenv
 
-# Load environment variables (API keys and regions)
+# Step 1: Load environment variables
 load_dotenv()
-translator_key = os.getenv("TRANSLATOR_KEY")
-translator_region = os.getenv("TRANSLATOR_REGION")
 speech_key = os.getenv("SPEECH_KEY")
 speech_region = os.getenv("SPEECH_REGION")
 
-# Translation API setup
-translator_url = "https://api.cognitive.microsofttranslator.com/translate"
-translator_params = {
-    'api-version': '3.0',
-    'from': 'en',
-    'to': ['ko']  # You can add more languages here
-}
+# Step 2: Set up speech translation config
+translation_config = speechsdk.translation.SpeechTranslationConfig(
+    subscription=speech_key,
+    region=speech_region
+)
 
-# Helper function to build request headers
-def get_translator_headers():
-    return {
-        'Ocp-Apim-Subscription-Key': translator_key,
-        'Ocp-Apim-Subscription-Region': translator_region,
-        'Content-type': 'application/json',
-        'X-ClientTraceId': str(uuid.uuid4())
-    }
+# Define input language and target translation language
+translation_config.speech_recognition_language = "en-US"
+translation_config.add_target_language("ko")  # You can add more if needed
 
-# Single translation request for full sentence
-def translate_text(full_sentence):
-    if not full_sentence.strip():
-        return None  # Avoid sending empty requests
-    body = [{'text': full_sentence}]
+# Step 3: Set up recognizer using default microphone
+audio_config = speechsdk.audio.AudioConfig(use_default_microphone=True)
+translator = speechsdk.translation.TranslationRecognizer(
+    translation_config=translation_config,
+    audio_config=audio_config
+)
 
-    # API call
-    response = requests.post(
-        translator_url,
-        params=translator_params,
-        headers=get_translator_headers(),
-        json=body
-    )
-    if response.status_code == 200:
-        return response.json()
-    else:
-        print(f"Translation API Error {response.status_code}: {response.text}")
-        return None
+print("Speak a sentence in English. Press Ctrl+C to stop.\n")
 
-# Set up Azure Speech Recognizer for full-utterance recognition
-speech_config = speechsdk.SpeechConfig(subscription=speech_key, region=speech_region)
-speech_config.speech_recognition_language = "en-US"
-speech_config.output_format = speechsdk.OutputFormat.Detailed  # Optional: detailed result with confidence
-recognizer = speechsdk.SpeechRecognizer(speech_config=speech_config)
-
-print("Speak a full sentence. Press Ctrl+C to stop.\n")
-
+# Step 4: Main recognition loop
 try:
     while True:
         print("Listening...")
-        result = recognizer.recognize_once()
 
-        # Process only if valid speech was recognized
-        if result.reason == speechsdk.ResultReason.RecognizedSpeech:
-            spoken_text = result.text.strip()
-            if spoken_text: # If text is not empty
-                print(f"Recognized: {spoken_text}")
-                translation_result = translate_text(spoken_text)
-                if translation_result:
-                    for t in translation_result[0]["translations"]:
-                        print(f"[{t['to']}]: {t['text']}")
-                print()
-            else:
-                print("Empty result.\n")
+        # Recognize one full utterance
+        result = translator.recognize_once() # API call
 
-        # Speech recognizer didn't match any spoken input to valid speech
+        # Step 5: Handle result
+        if result.reason == speechsdk.ResultReason.TranslatedSpeech:
+            print(f"Recognized: {result.text}")
+            print(f"Translated [ko]: {result.translations['ko']}")
+            print()
+
+        elif result.reason == speechsdk.ResultReason.RecognizedSpeech:
+            print("Recognized, but no translation available.\n")
+
         elif result.reason == speechsdk.ResultReason.NoMatch:
             print("No recognizable speech.\n")
 
-        # Recognition Process cancelled
         elif result.reason == speechsdk.ResultReason.Canceled:
             cancellation_details = result.cancellation_details
             print(f"Canceled: {cancellation_details.reason}")
             if cancellation_details.reason == speechsdk.CancellationReason.Error:
-                print(f"Details: {cancellation_details.error_details}")
+                print(f"Error details: {cancellation_details.error_details}")
             break
-        time.sleep(0.3)  # Slight delay to prevent fast-looping
+
+        time.sleep(0.3)  # Slight delay to debounce loop
 
 except KeyboardInterrupt:
     print("\nTranslation session ended by user.")
