@@ -35,18 +35,17 @@ try:
         # Recognize one full utterance
         result = translator.recognize_once() # API call
 
-        # Step 5: Handle result
+        # Handle result
         if result.reason == speechsdk.ResultReason.TranslatedSpeech:
             print(f"Recognized: {result.text}")
             print(f"Translated [ko]: {result.translations['ko']}")
             print()
 
-        elif result.reason == speechsdk.ResultReason.RecognizedSpeech:
-            print("Recognized, but no translation available.\n")
-
+        # No valid speech detected from input
         elif result.reason == speechsdk.ResultReason.NoMatch:
             print("No recognizable speech.\n")
 
+        # Recognition cancelled due to interruption
         elif result.reason == speechsdk.ResultReason.Canceled:
             cancellation_details = result.cancellation_details
             print(f"Canceled: {cancellation_details.reason}")
