@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Live Translation</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background: #f9f9f9;
+      font-family: sans-serif;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .wrapper {
+      text-align: center;
+    }
+
+    h1 {
+      color: #0ea5e9;
+    }
+
+    #translated {
+      font-size: 1.5rem;
+      margin-top: 30px;
+      background: #e2e8f0;
+      padding: 12px 16px;
+      border-radius: 10px;
+      width: 500px;
+      height: 250px;
+      overflow-y: auto;
+      overflow-x: hidden;
+      box-sizing: border-box;
+      margin-left: auto;
+      margin-right: auto;
+      text-align: left;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <h1>Worship On Air - AI Translation</h1>
+    <p><em>Speaking English</em></p>
+    <div id="translated">Waiting for translation...</div>
+  </div>
+
+  <script>
+    const ws = new WebSocket("ws://localhost:8000/ws/translate");
+    const output = document.getElementById("translated");
+
+    output.textContent = "";
+
+    ws.onmessage = (event) => {
+      const message = event.data;
+
+      const line = document.createElement("div");
+      line.textContent = message;
+      output.appendChild(line);
+
+      // Auto-scroll to bottom
+      output.scrollTop = output.scrollHeight;
+    };
+
+    ws.onerror = () => {
+      const errorLine = document.createElement("div");
+      errorLine.textContent = "[WebSocket Error]";
+      errorLine.style.color = "red";
+      output.appendChild(errorLine);
+    };
+  </script>
+</body>
+</html>

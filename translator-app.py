@@ -1,59 +1,64 @@
 import azure.cognitiveservices.speech as speechsdk
-import time
 import os
+import asyncio
+from fastapi import FastAPI, WebSocket
+from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
+import uvicorn
 
-#  Load environment variables
+# Load env vars
 load_dotenv()
 speech_key = os.getenv("SPEECH_KEY")
 speech_region = os.getenv("SPEECH_REGION")
 
-# Set up speech translation config
-translation_config = speechsdk.translation.SpeechTranslationConfig(
-    subscription=speech_key,
-    region=speech_region
+app = FastAPI()
+
+# Allow frontend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Change to your domain in production
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
-# Define input language and target translation language
-translation_config.speech_recognition_language = "en-US"
-translation_config.add_target_language("ko")  # You can add more if needed
+@app.websocket("/ws/translate")
+async def translate_ws(websocket: WebSocket):
+    await websocket.accept()
 
-# Set up recognizer using default microphone
-audio_config = speechsdk.audio.AudioConfig(use_default_microphone=True)
-translator = speechsdk.translation.TranslationRecognizer(
-    translation_config=translation_config,
-    audio_config=audio_config
-)
+    translation_config = speechsdk.translation.SpeechTranslationConfig(
+        subscription=speech_key,
+        region=speech_region
+    )
+    translation_config.speech_recognition_language = "en-US"
+    translation_config.add_target_language("ko")
+    audio_config = speechsdk.audio.AudioConfig(use_default_microphone=True)
+    translator = speechsdk.translation.TranslationRecognizer(
+        translation_config=translation_config,
+        audio_config=audio_config
+    )
 
-print("Speak a sentence in English. Press Ctrl+C to stop.\n")
+    await websocket.send_text("Listening...")
 
-# Main recognition loop
-try:
-    while True:
-        print("Listening...")
+    try:
+        while True:
+            result = translator.recognize_once()
 
-        # Recognize one full utterance
-        result = translator.recognize_once() # API call
+            if result.reason == speechsdk.ResultReason.TranslatedSpeech:
+                translated_text = result.translations['ko']
+                await websocket.send_text(translated_text)
 
-        # Handle result
-        if result.reason == speechsdk.ResultReason.TranslatedSpeech:
-            print(f"Recognized: {result.text}")
-            print(f"Translated [ko]: {result.translations['ko']}")
-            print()
+            elif result.reason == speechsdk.ResultReason.NoMatch:
+                await websocket.send_text("[No speech detected]")
 
-        # No valid speech detected from input
-        elif result.reason == speechsdk.ResultReason.NoMatch:
-            print("No recognizable speech.\n")
+            elif result.reason == speechsdk.ResultReason.Canceled:
+                await websocket.send_text("[Canceled]")
+                break
 
-        # Recognition cancelled due to interruption
-        elif result.reason == speechsdk.ResultReason.Canceled:
-            cancellation_details = result.cancellation_details
-            print(f"Canceled: {cancellation_details.reason}")
-            if cancellation_details.reason == speechsdk.CancellationReason.Error:
-                print(f"Error details: {cancellation_details.error_details}")
-            break
+            await asyncio.sleep(0.5)
 
-        time.sleep(0.3)
+    except Exception as e:
+        await websocket.send_text(f"[Error] {str(e)}")
 
-except KeyboardInterrupt:
-    print("\nTranslation session ended by user.")
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8000)
