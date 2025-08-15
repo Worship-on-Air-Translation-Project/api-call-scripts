@@ -1,0 +1,17 @@
+# Environment variable management
+python-dotenv==1.0.0
+
+# Retry mechanism for reliability
+tenacity==8.2.3
+
+# Azure Event Hub dependencies
+azure-eventhub==5.11.6
+
+# Azure Speech SDK
+azure-cognitiveservices-speech==1.38.0
+
+# Advanced monitoring and telemetry (Optional)
+azure-monitor-opentelemetry==1.2.0
+
+# Standard dependencies (Optional))
+aiohttp==3.9.5
