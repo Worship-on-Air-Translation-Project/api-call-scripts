@@ -17,51 +17,82 @@
 
     .wrapper {
       text-align: center;
+      width: 90%;
+      max-width: 800px;
     }
 
     h1 {
       color: #0ea5e9;
     }
 
-    #translated {
-      font-size: 1.5rem;
+    #output {
       margin-top: 30px;
       background: #e2e8f0;
-      padding: 12px 16px;
+      padding: 16px;
       border-radius: 10px;
-      width: 500px;
-      height: 250px;
+      height: 400px;
       overflow-y: auto;
-      overflow-x: hidden;
-      box-sizing: border-box;
-      margin-left: auto;
-      margin-right: auto;
       text-align: left;
+    }
+
+    .pair {
+      margin-bottom: 20px; /* space between transcript+translation blocks */
+      padding-bottom: 10px;
+      border-bottom: 1px solid #cbd5e1;
+    }
+
+    .transcript {
+      font-weight: bold;
+      margin-bottom: 6px;
+      color: #111827;
+    }
+
+    .translation {
+      color: #334155;
     }
   </style>
 </head>
 <body>
   <div class="wrapper">
     <h1>Worship On Air - AI Translation</h1>
-    <p><em>Speaking English</em></p>
-    <div id="translated">Waiting for translation...</div>
+    <p><em>English → Korean</em></p>
+
+    <div id="output"></div>
   </div>
 
   <script>
     const ws = new WebSocket("ws://localhost:8000/ws/translate");
-    const output = document.getElementById("translated");
-
-    output.textContent = "";
+    const output = document.getElementById("output");
 
     ws.onmessage = (event) => {
-      const message = event.data;
+      try {
+        const data = JSON.parse(event.data);
 
-      const line = document.createElement("div");
-      line.textContent = message;
-      output.appendChild(line);
+        if (data.transcript && data.translation) {
+          const pair = document.createElement("div");
+          pair.className = "pair";
 
-      // Auto-scroll to bottom
-      output.scrollTop = output.scrollHeight;
+          const transcript = document.createElement("div");
+          transcript.className = "transcript";
+          transcript.textContent = data.transcript;
+
+          const translation = document.createElement("div");
+          translation.className = "translation";
+          translation.textContent = data.translation;
+
+          pair.appendChild(transcript);
+          pair.appendChild(translation);
+
+          output.appendChild(pair);
+
+          // Auto-scroll
+          output.scrollTop = output.scrollHeight;
+        } else {
+          console.log("Message:", data);
+        }
+      } catch (e) {
+        console.warn("Non-JSON message:", event.data);
+      }
     };
 
     ws.onerror = () => {

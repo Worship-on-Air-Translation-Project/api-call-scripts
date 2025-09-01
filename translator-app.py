@@ -45,8 +45,15 @@ async def translate_ws(websocket: WebSocket):
             result = translator.recognize_once()
 
             if result.reason == speechsdk.ResultReason.TranslatedSpeech:
-                translated_text = result.translations['ko']
-                await websocket.send_text(translated_text)
+                original_text = result.text  # English transcript
+                translated_text = result.translations['ko']  # Korean translation
+
+                # Send both back in JSON format so frontend can separate them
+                payload = {
+                    "transcript": original_text,
+                    "translation": translated_text
+                }
+                await websocket.send_json(payload)
 
             elif result.reason == speechsdk.ResultReason.NoMatch:
                 await websocket.send_text("[No speech detected]")
