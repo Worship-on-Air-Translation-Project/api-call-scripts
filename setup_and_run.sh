@@ -36,7 +36,7 @@ SERVER_PID=$!
 sleep 3
 
 echo "Opening website"
-open static/index.html
+open index.html
 
 # Kill server when script exits
 trap "echo 'Stopping server...'; kill -9 $SERVER_PID" EXIT
