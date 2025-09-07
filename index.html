@@ -109,7 +109,24 @@
   ws.onopen = () => {
     navigator.mediaDevices.getUserMedia({ audio: true })
       .then(stream => {
-        const mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
+        console.log("Mic access granted ✅");
+        const micStatus = document.createElement("div");
+        micStatus.textContent = "[Mic Ready - streaming...]";
+        micStatus.style.color = "green";
+        output.appendChild(micStatus);
+
+        // Pick supported mimeType
+        let options = {};
+        if (MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) {
+          options.mimeType = "audio/webm;codecs=opus";
+        } else if (MediaRecorder.isTypeSupported("audio/webm")) {
+          options.mimeType = "audio/webm";
+        } else {
+          // fallback for Safari
+          options = {};
+        }
+
+        const mediaRecorder = new MediaRecorder(stream, options);
 
         mediaRecorder.ondataavailable = (event) => {
           if (event.data.size > 0 && ws.readyState === WebSocket.OPEN) {
@@ -130,6 +147,7 @@
       });
   };
 </script>
+
 
 
 </body>
