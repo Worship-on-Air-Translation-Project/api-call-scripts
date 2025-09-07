@@ -1,92 +1,6 @@
 import azure.cognitiveservices.speech as speechsdk
 import os
 import asyncio
-
-# --- add near your imports ---
-import os, json, aiohttp
-from typing import Set
-from fastapi import WebSocket, WebSocketDisconnect
-from fastapi.responses import PlainTextResponse, JSONResponse
-
-SPEECH_KEY = os.getenv("SPEECH_KEY")
-SPEECH_REGION = os.getenv("SPEECH_REGION")
-TRANSLATOR_KEY = os.getenv("TRANSLATOR_KEY")
-TRANSLATOR_REGION = os.getenv("TRANSLATOR_REGION")
-TRANSLATOR_ENDPOINT = os.getenv("TRANSLATOR_ENDPOINT", "https://api.cognitive.microsofttranslator.com")
-
-# --- expose region to client (so index.html doesn’t hard-code it) ---
-app = FastAPI()
-
-@app.get("/speech/config", include_in_schema=False)
-def speech_cfg():
-    return {"region": SPEECH_REGION or ""}
-
-# --- token endpoint for browser Speech SDK (keeps key off the page) ---
-@app.post("/speech/token", response_class=PlainTextResponse, include_in_schema=False)
-async def speech_token():
-    assert SPEECH_KEY and SPEECH_REGION, "Missing SPEECH_KEY/REGION"
-    url = f"https://{SPEECH_REGION}.api.cognitive.microsoft.com/sts/v1.0/issueToken"
-    headers = {"Ocp-Apim-Subscription-Key": SPEECH_KEY}
-    async with aiohttp.ClientSession() as s:
-        async with s.post(url, headers=headers) as r:
-            r.raise_for_status()
-            return await r.text()
-
-# --- simple broadcast hub so all viewers see the same stream ---
-class ConnectionManager:
-    def __init__(self) -> None:
-        self.active: Set[WebSocket] = set()
-    async def connect(self, ws: WebSocket):
-        await ws.accept(); self.active.add(ws)
-    def disconnect(self, ws: WebSocket):
-        self.active.discard(ws)
-    async def broadcast(self, text: str):
-        dead = []
-        for ws in list(self.active):
-            try: await ws.send_text(text)
-            except Exception: dead.append(ws)
-        for ws in dead: self.disconnect(ws)
-
-manager = ConnectionManager()
-
-@app.websocket("/ws")
-async def ws_stream(ws: WebSocket):
-    await manager.connect(ws)
-    try:
-        while True:
-            await ws.receive_text()  # ignore client pings
-    except WebSocketDisconnect:
-        manager.disconnect(ws)
-
-# --- translate on server, then broadcast ---
-async def translate_text(text: str, lang_from: str, lang_to: str) -> str:
-    if not (TRANSLATOR_KEY and TRANSLATOR_REGION):
-        return text  # fallback: echo if Translator not configured
-    url = f"{TRANSLATOR_ENDPOINT}/translate"
-    params = {"api-version": "3.0", "to": lang_to}
-    if lang_from: params["from"] = lang_from
-    headers = {
-        "Ocp-Apim-Subscription-Key": TRANSLATOR_KEY,
-        "Ocp-Apim-Subscription-Region": TRANSLATOR_REGION,
-        "Content-Type": "application/json",
-    }
-    payload = [{"Text": text}]
-    async with aiohttp.ClientSession() as s:
-        async with s.post(url, params=params, headers=headers, json=payload) as r:
-            r.raise_for_status()
-            data = await r.json()
-            return data[0]["translations"][0]["text"]
-
-@app.post("/publish", include_in_schema=False)
-async def publish(payload: dict):
-    text = (payload.get("text") or "").strip()
-    if not text:
-        return JSONResponse({"error": "empty text"}, status_code=400)
-    lang_from = payload.get("from") or "en"
-    lang_to   = payload.get("to")   or "ko"
-    translated = await translate_text(text, lang_from, lang_to)
-    await manager.broadcast(json.dumps({"transcript": text, "translation": translated}))
-    return {"ok": True}
 from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
@@ -100,8 +14,6 @@ INDEX_PATH = BASE_DIR / "index.html"
 STATIC_DIR = BASE_DIR / "static"
 
 import uvicorn
-
-
 
 # Load env vars
 load_dotenv()
