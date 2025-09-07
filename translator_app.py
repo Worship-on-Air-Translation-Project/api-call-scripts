@@ -15,6 +15,8 @@ TRANSLATOR_REGION = os.getenv("TRANSLATOR_REGION")
 TRANSLATOR_ENDPOINT = os.getenv("TRANSLATOR_ENDPOINT", "https://api.cognitive.microsofttranslator.com")
 
 # --- expose region to client (so index.html doesn’t hard-code it) ---
+app = FastAPI()
+
 @app.get("/speech/config", include_in_schema=False)
 def speech_cfg():
     return {"region": SPEECH_REGION or ""}
