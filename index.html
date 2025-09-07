@@ -68,6 +68,7 @@
 
   const output = document.getElementById("output");
 
+  // --- Receive messages from server ---
   ws.onmessage = (event) => {
     try {
       const data = JSON.parse(event.data);
@@ -88,9 +89,7 @@
         pair.appendChild(translation);
 
         output.appendChild(pair);
-
-        // Auto-scroll
-        output.scrollTop = output.scrollHeight;
+        output.scrollTop = output.scrollHeight; // auto-scroll
       } else {
         console.log("Message:", data);
       }
@@ -105,7 +104,33 @@
     errorLine.style.color = "red";
     output.appendChild(errorLine);
   };
+
+  // --- Capture mic and send audio to server ---
+  ws.onopen = () => {
+    navigator.mediaDevices.getUserMedia({ audio: true })
+      .then(stream => {
+        const mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
+
+        mediaRecorder.ondataavailable = (event) => {
+          if (event.data.size > 0 && ws.readyState === WebSocket.OPEN) {
+            event.data.arrayBuffer().then(buf => {
+              ws.send(buf); // send audio chunk
+            });
+          }
+        };
+
+        mediaRecorder.start(250); // send every 250ms
+      })
+      .catch(err => {
+        console.error("Mic error:", err);
+        const micError = document.createElement("div");
+        micError.textContent = "[Mic Error] " + err.message;
+        micError.style.color = "red";
+        output.appendChild(micError);
+      });
+  };
 </script>
+
 
 </body>
 </html>

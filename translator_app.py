@@ -52,38 +52,33 @@ async def translate_ws(websocket: WebSocket):
     )
     translation_config.speech_recognition_language = "en-US"
     translation_config.add_target_language("ko")
-    audio_config = speechsdk.audio.AudioConfig(use_default_microphone=True)
+
+    stream = speechsdk.audio.PushAudioInputStream()
+    audio_config = speechsdk.audio.AudioConfig(stream=stream)
     translator = speechsdk.translation.TranslationRecognizer(
         translation_config=translation_config,
         audio_config=audio_config
     )
 
-    await websocket.send_text("Listening...")
+    loop = asyncio.get_event_loop()
 
     try:
         while True:
-            result = translator.recognize_once()
+            msg = await websocket.receive_bytes()  # get raw audio from browser
+            stream.write(msg)  # push into Azure Speech
+            # recognizer can be started in continuous mode
+            result = await asyncio.to_thread(translator.recognize_once)
 
             if result.reason == speechsdk.ResultReason.TranslatedSpeech:
-                original_text = result.text  # English transcript
-                translated_text = result.translations['ko']  # Korean translation
-
-                # Send both back in JSON format so frontend can separate them
-                payload = {
-                    "transcript": original_text,
-                    "translation": translated_text
-                }
-                await websocket.send_json(payload)
-
+                await websocket.send_json({
+                    "transcript": result.text,
+                    "translation": result.translations["ko"]
+                })
             elif result.reason == speechsdk.ResultReason.NoMatch:
                 await websocket.send_text("[No speech detected]")
-
             elif result.reason == speechsdk.ResultReason.Canceled:
                 await websocket.send_text("[Canceled]")
                 break
-
-            await asyncio.sleep(0.5)
-
     except Exception as e:
         await websocket.send_text(f"[Error] {str(e)}")
 
