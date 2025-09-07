@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Live Translation</title>
+  <title>Worship On Air - Live Translation</title>
   <style>
     body {
       margin: 0;
@@ -25,44 +25,72 @@
       color: #0ea5e9;
     }
 
-    .controls {
+    .auto-listen-banner {
+      padding: 15px;
       margin: 20px 0;
-    }
-
-    .btn {
-      padding: 12px 24px;
-      margin: 0 10px;
-      border: none;
-      border-radius: 5px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, #10b981, #059669);
+      color: white;
+      font-weight: bold;
       font-size: 16px;
-      cursor: pointer;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     }
 
-    .btn-primary {
+    .listening-indicator {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      margin: 20px 0;
+      padding: 15px;
+      background: #dbeafe;
+      border-radius: 8px;
+      border: 2px solid #0ea5e9;
+    }
+
+    .listening-indicator.active {
+      background: #dcfce7;
+      border-color: #10b981;
+    }
+
+    .listening-indicator.error {
+      background: #fecaca;
+      border-color: #ef4444;
+    }
+
+    .pulse-dot {
+      width: 12px;
+      height: 12px;
       background: #0ea5e9;
-      color: white;
+      border-radius: 50%;
+      animation: pulse 1.5s infinite;
     }
 
-    .btn-danger {
+    .pulse-dot.active {
+      background: #10b981;
+    }
+
+    .pulse-dot.error {
       background: #ef4444;
-      color: white;
     }
 
-    .btn:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
+    @keyframes pulse {
+      0% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(1.2); }
+      100% { opacity: 1; transform: scale(1); }
     }
 
     .status {
-      padding: 10px;
-      margin: 10px 0;
-      border-radius: 5px;
+      padding: 12px;
+      margin: 15px 0;
+      border-radius: 8px;
       font-weight: bold;
+      font-size: 14px;
     }
 
     .status.listening {
-      background: #dbeafe;
-      color: #1e40af;
+      background: #dcfce7;
+      color: #166534;
     }
 
     .status.error {
@@ -70,9 +98,23 @@
       color: #991b1b;
     }
 
-    .status.success {
-      background: #dcfce7;
-      color: #166534;
+    .status.initializing {
+      background: #fef3c7;
+      color: #92400e;
+    }
+
+    .permission-notice {
+      padding: 20px;
+      margin: 20px 0;
+      background: #fef3c7;
+      border: 2px dashed #f59e0b;
+      border-radius: 10px;
+      color: #92400e;
+    }
+
+    .permission-notice h3 {
+      margin: 0 0 10px 0;
+      color: #d97706;
     }
 
     #output {
@@ -87,149 +129,294 @@
 
     .pair {
       margin-bottom: 20px;
-      padding-bottom: 10px;
-      border-bottom: 1px solid #cbd5e1;
+      padding: 12px;
+      border-radius: 8px;
+      border-left: 4px solid #0ea5e9;
+      background: #eff6ff;
+    }
+
+    .pair.interim {
+      opacity: 0.7;
+      font-style: italic;
+      background: #f8fafc;
+      border-left-color: #64748b;
+    }
+
+    .speaker-info {
+      font-size: 12px;
+      color: #64748b;
+      margin-bottom: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
     }
 
     .transcript {
       font-weight: bold;
-      margin-bottom: 6px;
+      margin-bottom: 8px;
       color: #111827;
+      font-size: 16px;
     }
 
     .translation {
       color: #334155;
+      font-size: 15px;
+      padding: 8px;
+      background: rgba(255, 255, 255, 0.5);
+      border-radius: 5px;
     }
 
-    .interim {
-      opacity: 0.7;
+    .timestamp {
+      font-size: 11px;
+      color: #9ca3af;
+    }
+
+    .restart-info {
+      font-size: 12px;
+      color: #64748b;
+      margin-top: 10px;
       font-style: italic;
     }
   </style>
 </head>
 <body>
   <div class="wrapper">
-    <h1>Worship On Air - AI Translation</h1>
+    <h1>🙏 Worship On Air - Live Translation</h1>
+    <p><em>Automatic Speech Recognition & Translation</em></p>
     
-    <div class="controls">
-      <button id="startBtn" class="btn btn-primary">Start Listening</button>
-      <button id="stopBtn" class="btn btn-danger" disabled>⏹Stop</button>
+    <div class="auto-listen-banner">
+      🎤 Auto-Listen Mode: Continuous speech recognition is active
     </div>
     
-    <div id="status" class="status">Ready to start speech recognition</div>
+    <div id="listeningIndicator" class="listening-indicator">
+      <div id="pulseDot" class="pulse-dot"></div>
+      <span id="listeningText">Initializing speech recognition...</span>
+    </div>
+    
+    <div id="permissionNotice" class="permission-notice" style="display: none;">
+      <h3>🎤 Microphone Permission Required</h3>
+      <p>Please allow microphone access when prompted by your browser to enable automatic speech recognition.</p>
+    </div>
+    
+    <div id="status" class="status initializing">Starting automatic speech recognition...</div>
     
     <div id="output"></div>
+    
+    <div class="restart-info">
+      Speech recognition will automatically restart if interrupted
+    </div>
   </div>
 
 <script>
-  // Check for browser support
-  if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-    document.getElementById('status').innerHTML = 
-      '<div class="status error">Speech Recognition not supported in this browser. Try Chrome.</div>';
-  }
-
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  const recognition = new SpeechRecognition();
-  
-  const startBtn = document.getElementById('startBtn');
-  const stopBtn = document.getElementById('stopBtn');
+  // DOM elements
+  const listeningIndicator = document.getElementById('listeningIndicator');
+  const pulseDot = document.getElementById('pulseDot');
+  const listeningText = document.getElementById('listeningText');
+  const permissionNotice = document.getElementById('permissionNotice');
   const status = document.getElementById('status');
   const output = document.getElementById('output');
-  
+
+  // Speech recognition variables
+  let recognition = null;
   let isListening = false;
   let interimElement = null;
+  let autoRestartTimeout = null;
+  let restartAttempts = 0;
+  const maxRestartAttempts = 5;
 
-  // Configure speech recognition
-  recognition.continuous = true;
-  recognition.interimResults = true;
-  recognition.lang = 'en-US';
+  // Check for browser support
+  function checkBrowserSupport() {
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+      updateStatus('Browser not supported. Please use Chrome or Edge.', 'error');
+      updateListeningIndicator('Browser not supported', 'error');
+      return false;
+    }
+    return true;
+  }
 
-  recognition.onstart = () => {
-    isListening = true;
-    startBtn.disabled = true;
-    stopBtn.disabled = false;
-    status.textContent = '🎤 Listening... Speak now!';
-    status.className = 'status listening';
-  };
+  // Update listening indicator
+  function updateListeningIndicator(text, state = 'default') {
+    listeningText.textContent = text;
+    
+    // Reset classes
+    listeningIndicator.className = 'listening-indicator';
+    pulseDot.className = 'pulse-dot';
+    
+    // Add state-specific classes
+    if (state === 'active') {
+      listeningIndicator.classList.add('active');
+      pulseDot.classList.add('active');
+    } else if (state === 'error') {
+      listeningIndicator.classList.add('error');
+      pulseDot.classList.add('error');
+    }
+  }
 
-  recognition.onend = () => {
-    isListening = false;
-    startBtn.disabled = false;
-    stopBtn.disabled = true;
-    status.textContent = 'Speech recognition stopped';
-    status.className = 'status';
-  };
+  // Update status message
+  function updateStatus(message, type = 'default') {
+    status.textContent = message;
+    status.className = `status ${type}`;
+  }
 
-  recognition.onerror = (event) => {
-    status.textContent = `Error: ${event.error}`;
-    status.className = 'status error';
-    isListening = false;
-    startBtn.disabled = false;
-    stopBtn.disabled = true;
-  };
+  // Initialize speech recognition
+  function initSpeechRecognition() {
+    if (!checkBrowserSupport()) return false;
 
-  recognition.onresult = async (event) => {
-    let interimTranscript = '';
-    let finalTranscript = '';
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    recognition = new SpeechRecognition();
+    
+    // Configure recognition
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
 
-    for (let i = event.resultIndex; i < event.results.length; i++) {
-      const transcript = event.results[i][0].transcript;
+    // Event handlers
+    recognition.onstart = () => {
+      isListening = true;
+      restartAttempts = 0;
+      updateListeningIndicator('🎤 Listening for speech...', 'active');
+      updateStatus('Listening... Speak naturally and your words will be translated.', 'listening');
+      permissionNotice.style.display = 'none';
       
-      if (event.results[i].isFinal) {
-        finalTranscript += transcript;
+      // Clear any pending restart timeout
+      if (autoRestartTimeout) {
+        clearTimeout(autoRestartTimeout);
+        autoRestartTimeout = null;
+      }
+    };
+
+    recognition.onend = () => {
+      isListening = false;
+      updateListeningIndicator('🔄 Restarting speech recognition...', 'default');
+      updateStatus('Restarting speech recognition...', 'initializing');
+      
+      // Auto-restart after a short delay
+      if (restartAttempts < maxRestartAttempts) {
+        autoRestartTimeout = setTimeout(() => {
+          restartAttempts++;
+          startRecognition();
+        }, 1000);
       } else {
-        interimTranscript += transcript;
+        updateListeningIndicator('❌ Too many restart attempts', 'error');
+        updateStatus('Speech recognition failed after multiple attempts. Please refresh the page.', 'error');
       }
-    }
+    };
 
-    // Show interim results
-    if (interimTranscript) {
-      if (!interimElement) {
-        interimElement = document.createElement('div');
-        interimElement.className = 'pair interim';
-        output.appendChild(interimElement);
+    recognition.onerror = (event) => {
+      console.error('Speech recognition error:', event.error);
+      
+      if (event.error === 'not-allowed') {
+        permissionNotice.style.display = 'block';
+        updateListeningIndicator('❌ Microphone permission denied', 'error');
+        updateStatus('Microphone access denied. Please allow microphone permission and refresh the page.', 'error');
+      } else if (event.error === 'no-speech') {
+        // This is normal - just continue listening
+        console.log('No speech detected, continuing...');
+      } else {
+        updateListeningIndicator(`❌ Error: ${event.error}`, 'error');
+        updateStatus(`Speech recognition error: ${event.error}`, 'error');
       }
-      interimElement.innerHTML = `
-        <div class="transcript">${interimTranscript}</div>
-        <div class="translation">Translating...</div>
-      `;
-      output.scrollTop = output.scrollHeight;
-    }
+    };
 
-    // Process final results
-    if (finalTranscript.trim()) {
-      // Remove interim element
-      if (interimElement) {
-        interimElement.remove();
-        interimElement = null;
-      }
+    recognition.onresult = async (event) => {
+      let interimTranscript = '';
+      let finalTranscript = '';
 
-      // Translate the final transcript
-      try {
-        const translation = await translateText(finalTranscript.trim());
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript;
         
-        const pair = document.createElement('div');
-        pair.className = 'pair';
-        pair.innerHTML = `
-          <div class="transcript">${finalTranscript.trim()}</div>
-          <div class="translation">${translation}</div>
+        if (event.results[i].isFinal) {
+          finalTranscript += transcript;
+        } else {
+          interimTranscript += transcript;
+        }
+      }
+
+      // Show interim results
+      if (interimTranscript) {
+        if (!interimElement) {
+          interimElement = document.createElement('div');
+          interimElement.className = 'pair interim';
+          output.appendChild(interimElement);
+        }
+        
+        interimElement.innerHTML = `
+          <div class="speaker-info">
+            <span>🎤 Speaking...</span>
+            <span class="timestamp">${new Date().toLocaleTimeString()}</span>
+          </div>
+          <div class="transcript">${interimTranscript}</div>
+          <div class="translation">Translating...</div>
         `;
-        output.appendChild(pair);
         output.scrollTop = output.scrollHeight;
-        
+      }
+
+      // Process final results
+      if (finalTranscript.trim()) {
+        // Remove interim element
+        if (interimElement) {
+          interimElement.remove();
+          interimElement = null;
+        }
+
+        try {
+          updateListeningIndicator('🔄 Translating...', 'default');
+          const translation = await translateText(finalTranscript.trim());
+          
+          const pair = document.createElement('div');
+          pair.className = 'pair';
+          pair.innerHTML = `
+            <div class="speaker-info">
+              <span>🎤 Speech Recognition</span>
+              <span class="timestamp">${new Date().toLocaleTimeString()}</span>
+            </div>
+            <div class="transcript">${finalTranscript.trim()}</div>
+            <div class="translation">${translation}</div>
+          `;
+          output.appendChild(pair);
+          output.scrollTop = output.scrollHeight;
+          
+          updateListeningIndicator('🎤 Listening for speech...', 'active');
+          
+        } catch (error) {
+          console.error('Translation error:', error);
+          
+          const pair = document.createElement('div');
+          pair.className = 'pair';
+          pair.innerHTML = `
+            <div class="speaker-info">
+              <span>🎤 Speech Recognition</span>
+              <span class="timestamp">${new Date().toLocaleTimeString()}</span>
+            </div>
+            <div class="transcript">${finalTranscript.trim()}</div>
+            <div class="translation" style="color: red;">Translation failed - please try again</div>
+          `;
+          output.appendChild(pair);
+          output.scrollTop = output.scrollHeight;
+          
+          updateListeningIndicator('🎤 Listening for speech...', 'active');
+        }
+      }
+    };
+
+    return true;
+  }
+
+  // Start recognition
+  function startRecognition() {
+    if (recognition && !isListening) {
+      try {
+        updateListeningIndicator('🔄 Starting speech recognition...', 'default');
+        recognition.start();
       } catch (error) {
-        console.error('Translation error:', error);
-        const pair = document.createElement('div');
-        pair.className = 'pair';
-        pair.innerHTML = `
-          <div class="transcript">${finalTranscript.trim()}</div>
-          <div class="translation" style="color: red;">Translation failed</div>
-        `;
-        output.appendChild(pair);
+        console.error('Failed to start recognition:', error);
+        updateListeningIndicator('❌ Failed to start', 'error');
+        updateStatus('Failed to start speech recognition. Please refresh the page.', 'error');
       }
     }
-  };
+  }
 
+  // Translation function
   async function translateText(text) {
     try {
       const response = await fetch('/api/translate', {
@@ -239,8 +426,8 @@
         },
         body: JSON.stringify({
           text: text,
-          from: 'en',
-          to: 'ko'
+          from_lang: 'en',
+          to_lang: 'ko'
         })
       });
       
@@ -252,16 +439,38 @@
       return data.translation;
     } catch (error) {
       console.error('Translation API error:', error);
-      return 'Translation failed';
+      throw error;
     }
   }
 
-  startBtn.addEventListener('click', () => {
-    recognition.start();
+  // Initialize everything when page loads
+  document.addEventListener('DOMContentLoaded', () => {
+    updateStatus('Initializing speech recognition...', 'initializing');
+    
+    if (initSpeechRecognition()) {
+      // Small delay to ensure proper initialization
+      setTimeout(() => {
+        startRecognition();
+      }, 500);
+    }
   });
 
-  stopBtn.addEventListener('click', () => {
-    recognition.stop();
+  // Handle page visibility changes (restart when page becomes visible)
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && recognition && !isListening && restartAttempts < maxRestartAttempts) {
+      console.log('Page became visible, restarting recognition...');
+      setTimeout(startRecognition, 1000);
+    }
+  });
+
+  // Handle page unload
+  window.addEventListener('beforeunload', () => {
+    if (recognition && isListening) {
+      recognition.stop();
+    }
+    if (autoRestartTimeout) {
+      clearTimeout(autoRestartTimeout);
+    }
   });
 </script>
 </body>
