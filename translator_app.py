@@ -1,19 +1,6 @@
 import azure.cognitiveservices.speech as speechsdk
 import os
 import asyncio
-from fastapi import FastAPI, WebSocket
-from fastapi.middleware.cors import CORSMiddleware
-from dotenv import load_dotenv
-
-from pathlib import Path
-from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
-
-BASE_DIR = Path(__file__).resolve().parent
-INDEX_PATH = BASE_DIR / "index.html"
-STATIC_DIR = BASE_DIR / "static"
-
-import uvicorn
 
 # --- add near your imports ---
 import os, json, aiohttp
@@ -98,6 +85,20 @@ async def publish(payload: dict):
     translated = await translate_text(text, lang_from, lang_to)
     await manager.broadcast(json.dumps({"transcript": text, "translation": translated}))
     return {"ok": True}
+from fastapi import FastAPI, WebSocket
+from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv
+
+from pathlib import Path
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+
+BASE_DIR = Path(__file__).resolve().parent
+INDEX_PATH = BASE_DIR / "index.html"
+STATIC_DIR = BASE_DIR / "static"
+
+import uvicorn
+
 
 
 # Load env vars
@@ -130,6 +131,18 @@ app.add_middleware(
 @app.websocket("/ws/translate")
 async def translate_ws(websocket: WebSocket):
     await websocket.accept()
+
+    translation_config = speechsdk.translation.SpeechTranslationConfig(
+        subscription=speech_key,
+        region=speech_region
+    )
+    translation_config.speech_recognition_language = "en-US"
+    translation_config.add_target_language("ko")
+    audio_config = speechsdk.audio.AudioConfig(use_default_microphone=True)
+    translator = speechsdk.translation.TranslationRecognizer(
+        translation_config=translation_config,
+        audio_config=audio_config
+    )
 
     await websocket.send_text("Listening...")
 
