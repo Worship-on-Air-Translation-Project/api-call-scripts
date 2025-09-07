@@ -60,47 +60,75 @@
     <div id="output"></div>
   </div>
 
-  <script>
-    const ws = new WebSocket("ws://localhost:8000/ws/translate");
-    const output = document.getElementById("output");
+<script src="https://aka.ms/csspeech/jsbrowserpackageraw"></script>
 
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
+<button id="startBtn">🎙️ Start Microphone</button>
+<div id="status" style="margin-top:8px;color:#334155;"></div>
+<div id="output" class="container"></div>
 
-        if (data.transcript && data.translation) {
-          const pair = document.createElement("div");
-          pair.className = "pair";
+<script>
+const statusEl = document.getElementById("status");
+const outputEl = document.getElementById("output");
+const startBtn = document.getElementById("startBtn");
 
-          const transcript = document.createElement("div");
-          transcript.className = "transcript";
-          transcript.textContent = data.transcript;
+// Everyone connects here to receive the shared stream
+const scheme = location.protocol === "https:" ? "wss" : "ws";
+const ws = new WebSocket(`${scheme}://${location.host}/ws`);
+ws.onopen = () => status("WS connected");
+ws.onerror = () => status("WS error", true);
+ws.onmessage = (ev) => {
+  try {
+    const { transcript, translation } = JSON.parse(ev.data);
+    addPair(transcript, translation);
+  } catch {}
+};
 
-          const translation = document.createElement("div");
-          translation.className = "translation";
-          translation.textContent = data.translation;
+function status(msg, err=false){ statusEl.textContent = msg; statusEl.style.color = err ? "#b91c1c" : "#334155"; }
+function addPair(src, dst){
+  const wrap = document.createElement("div"); wrap.className = "pair";
+  const t1 = document.createElement("div"); t1.className = "transcript"; t1.textContent = src;
+  const t2 = document.createElement("div"); t2.className = "translation"; t2.textContent = dst;
+  wrap.appendChild(t1); wrap.appendChild(t2); outputEl.appendChild(wrap); outputEl.scrollTop = outputEl.scrollHeight;
+}
 
-          pair.appendChild(transcript);
-          pair.appendChild(translation);
+startBtn.addEventListener("click", async () => {
+  try {
+    if (!window.isSecureContext) status("⚠️ Use HTTPS for mic access", true);
 
-          output.appendChild(pair);
+    // 1) Get a short-lived token from backend
+    const token = await fetch("/speech/token", { method: "POST" }).then(r => r.text());
+    const region = "<PUT-YOUR-SPEECH-REGION-HERE>"; // e.g., westus2 (must match your SPEECH_REGION)
 
-          // Auto-scroll
-          output.scrollTop = output.scrollHeight;
-        } else {
-          console.log("Message:", data);
-        }
-      } catch (e) {
-        console.warn("Non-JSON message:", event.data);
-      }
+    // 2) Init SDK for mic → STT (client-side)
+    const speechConfig = SpeechSDK.SpeechConfig.fromAuthorizationToken(token, region);
+    speechConfig.speechRecognitionLanguage = "en-US"; // source language
+    const audioConfig = SpeechSDK.AudioConfig.fromDefaultMicrophoneInput();
+    const recognizer = new SpeechSDK.SpeechRecognizer(speechConfig, audioConfig);
+
+    recognizer.recognized = async (_s, e) => {
+      const text = e.result?.text?.trim();
+      if (!text) return;
+      // 3) Send text to the server to translate + broadcast to everyone
+      await fetch("/publish", {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({ text, from: "en", to: "ko" })
+      });
     };
 
-    ws.onerror = () => {
-      const errorLine = document.createElement("div");
-      errorLine.textContent = "[WebSocket Error]";
-      errorLine.style.color = "red";
-      output.appendChild(errorLine);
-    };
-  </script>
+    recognizer.canceled = (_s, e) => status("Canceled: " + e.errorDetails, true);
+    recognizer.recognizing = (_s, e) => status("Listening… " + (e.result?.text || ""));
+    recognizer.sessionStopped = () => status("Stopped");
+
+    recognizer.startContinuousRecognitionAsync(
+      () => status("🎤 Mic active. Speak now."),
+      (err) => status("Start error: " + err, true)
+    );
+  } catch (e) {
+    status("Mic/SDK error: " + e.message, true);
+  }
+});
+</script>
+
 </body>
 </html>
