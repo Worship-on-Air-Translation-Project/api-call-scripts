@@ -60,52 +60,94 @@
     <div id="output"></div>
   </div>
 
+<!-- Azure Speech SDK (browser) -->
+<script src="https://aka.ms/csspeech/jsbrowserpackageraw"></script>
+
+<button id="startBtn" style="margin-top:16px;">🎙️ Start Microphone</button>
+<div id="status" style="margin-top:8px;color:#334155;"></div>
+
 <script>
-  // Build WebSocket URL dynamically
-  const scheme = location.protocol === "https:" ? "wss" : "ws";
-  const wsUrl = `${scheme}://${location.host}/ws/translate`;
-  const ws = new WebSocket(wsUrl);
+const outputEl = document.getElementById("output");
+const statusEl = document.getElementById("status");
+const startBtn = document.getElementById("startBtn");
 
-  const output = document.getElementById("output");
+function setStatus(msg, err=false){ statusEl.textContent = msg; statusEl.style.color = err ? "#b91c1c" : "#334155"; }
+function addPair(src, dst){
+  const wrap = document.createElement("div");
+  wrap.className = "pair";
+  const t1 = document.createElement("div"); t1.className = "transcript";  t1.textContent = src || "";
+  const t2 = document.createElement("div"); t2.className = "translation"; t2.textContent = dst || "";
+  wrap.appendChild(t1); wrap.appendChild(t2);
+  outputEl.appendChild(wrap);
+  outputEl.scrollTop = outputEl.scrollHeight;
+}
 
-  ws.onmessage = (event) => {
-    try {
-      const data = JSON.parse(event.data);
+// 1) Everyone subscribes to the shared stream
+const scheme = location.protocol === "https:" ? "wss" : "ws";
+const ws = new WebSocket(`${scheme}://${location.host}/ws`);
+ws.onopen  = () => setStatus("WS connected");
+ws.onerror = () => setStatus("WS error", true);
+ws.onmessage = (ev) => {
+  try {
+    const { transcript, translation } = JSON.parse(ev.data);
+    if (transcript || translation) addPair(transcript, translation);
+  } catch {}
+};
 
-      if (data.transcript && data.translation) {
-        const pair = document.createElement("div");
-        pair.className = "pair";
+// 2) Mic + STT in the browser (Chrome), then POST text to /publish
+startBtn.addEventListener("click", async () => {
+  try {
+    if (!window.isSecureContext) setStatus("⚠️ Use HTTPS for mic access", true);
 
-        const transcript = document.createElement("div");
-        transcript.className = "transcript";
-        transcript.textContent = data.transcript;
+    // Prompt Chrome for mic permission once
+    const probe = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: false }
+    });
+    probe.getTracks().forEach(t => t.stop());
 
-        const translation = document.createElement("div");
-        translation.className = "translation";
-        translation.textContent = data.translation;
+    // Get region + token from backend (so region isn’t hard-coded)
+    const { region } = await fetch("/speech/config").then(r => r.json());
+    const token = await fetch("/speech/token", { method: "POST" }).then(r => r.text());
+    if (!region || !token) return setStatus("Missing region/token", true);
 
-        pair.appendChild(transcript);
-        pair.appendChild(translation);
+    // Init Azure Speech SDK
+    const speechConfig = SpeechSDK.SpeechConfig.fromAuthorizationToken(token, region);
+    speechConfig.speechRecognitionLanguage = "en-US";  // set your source language
+    const audioConfig  = SpeechSDK.AudioConfig.fromDefaultMicrophoneInput();
+    const recognizer   = new SpeechSDK.SpeechRecognizer(speechConfig, audioConfig);
 
-        output.appendChild(pair);
+    // Keep token fresh (~10min expiry)
+    setInterval(async () => {
+      try {
+        recognizer.authorizationToken = await fetch("/speech/token", { method: "POST" }).then(r => r.text());
+      } catch {}
+    }, 9 * 60 * 1000);
 
-        // Auto-scroll
-        output.scrollTop = output.scrollHeight;
-      } else {
-        console.log("Message:", data);
-      }
-    } catch (e) {
-      console.warn("Non-JSON message:", event.data);
-    }
-  };
+    recognizer.recognizing = (_s, e) => setStatus("Listening… " + (e.result?.text || ""));
+    recognizer.canceled    = (_s, e) => setStatus("Canceled: " + e.errorDetails, true);
+    recognizer.sessionStopped = () => setStatus("Stopped");
 
-  ws.onerror = () => {
-    const errorLine = document.createElement("div");
-    errorLine.textContent = "[WebSocket Error]";
-    errorLine.style.color = "red";
-    output.appendChild(errorLine);
-  };
+    // On each final result, POST to server → translate → broadcast
+    recognizer.recognized = async (_s, e) => {
+      const text = e.result?.text?.trim();
+      if (!text) return;
+      await fetch("/publish", {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({ text, from: "en", to: "ko" })  // adjust target
+      });
+    };
+
+    recognizer.startContinuousRecognitionAsync(
+      () => setStatus("🎤 Mic active. Speak now."),
+      (err) => setStatus("Start error: " + err, true)
+    );
+  } catch (e) {
+    setStatus("Mic/SDK error: " + e.message, true);
+  }
+});
 </script>
+
 
 </body>
 </html>
