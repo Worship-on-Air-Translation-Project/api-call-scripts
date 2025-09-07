@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Live Translation - Shared Experience</title>
+  <title>Worship On Air - Live Translation</title>
   <style>
     body {
       margin: 0;
@@ -23,6 +23,26 @@
 
     h1 {
       color: #0ea5e9;
+    }
+
+    .role-banner {
+      padding: 15px;
+      margin: 15px 0;
+      border-radius: 8px;
+      font-weight: bold;
+      font-size: 16px;
+    }
+
+    .role-banner.pastor {
+      background: linear-gradient(135deg, #0ea5e9, #3b82f6);
+      color: white;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+
+    .role-banner.congregation {
+      background: linear-gradient(135deg, #10b981, #059669);
+      color: white;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     }
 
     .connection-info {
@@ -62,6 +82,10 @@
       margin: 20px 0;
     }
 
+    .controls.hidden {
+      display: none;
+    }
+
     .btn {
       padding: 12px 24px;
       margin: 0 10px;
@@ -69,6 +93,7 @@
       border-radius: 5px;
       font-size: 16px;
       cursor: pointer;
+      transition: all 0.3s ease;
     }
 
     .btn-primary {
@@ -76,9 +101,17 @@
       color: white;
     }
 
+    .btn-primary:hover {
+      background: #0284c7;
+    }
+
     .btn-danger {
       background: #ef4444;
       color: white;
+    }
+
+    .btn-danger:hover {
+      background: #dc2626;
     }
 
     .btn:disabled {
@@ -108,6 +141,25 @@
       color: #166534;
     }
 
+    .status.waiting {
+      background: #fef3c7;
+      color: #92400e;
+    }
+
+    .viewer-message {
+      padding: 20px;
+      margin: 20px 0;
+      background: #f0fdf4;
+      border: 2px dashed #10b981;
+      border-radius: 10px;
+      color: #065f46;
+    }
+
+    .viewer-message h3 {
+      margin: 0 0 10px 0;
+      color: #059669;
+    }
+
     #output {
       margin-top: 30px;
       background: #e2e8f0;
@@ -120,17 +172,17 @@
 
     .pair {
       margin-bottom: 20px;
-      padding: 10px;
+      padding: 12px;
       border-radius: 8px;
       border-left: 4px solid #0ea5e9;
     }
 
-    .pair.own {
+    .pair.pastor {
       background: #eff6ff;
       border-left-color: #0ea5e9;
     }
 
-    .pair.remote {
+    .pair.congregation {
       background: #f0fdf4;
       border-left-color: #10b981;
     }
@@ -145,31 +197,80 @@
     .speaker-info {
       font-size: 12px;
       color: #64748b;
-      margin-bottom: 5px;
+      margin-bottom: 8px;
       display: flex;
       justify-content: space-between;
+      align-items: center;
+    }
+
+    .speaker-role {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-weight: bold;
+    }
+
+    .pastor-icon {
+      color: #0ea5e9;
+    }
+
+    .congregation-icon {
+      color: #10b981;
     }
 
     .transcript {
       font-weight: bold;
-      margin-bottom: 6px;
+      margin-bottom: 8px;
       color: #111827;
+      font-size: 16px;
     }
 
     .translation {
       color: #334155;
+      font-size: 15px;
+      padding: 8px;
+      background: rgba(255, 255, 255, 0.5);
+      border-radius: 5px;
     }
 
     .timestamp {
       font-size: 11px;
       color: #9ca3af;
     }
+
+    .live-indicator {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      color: #dc2626;
+      font-weight: bold;
+      font-size: 14px;
+    }
+
+    .live-dot {
+      width: 8px;
+      height: 8px;
+      background: #dc2626;
+      border-radius: 50%;
+      animation: pulse 1.5s infinite;
+    }
+
+    @keyframes pulse {
+      0% { opacity: 1; }
+      50% { opacity: 0.5; }
+      100% { opacity: 1; }
+    }
   </style>
 </head>
 <body>
   <div class="wrapper">
-    <h1>Worship On Air - AI Translation</h1>
-    <p><em>Shared Live Translation Experience</em></p>
+    <h1>🙏 Worship On Air - AI Translation</h1>
+    <p><em>Real-time English → Korean Translation</em></p>
+    
+    <!-- Role Banner -->
+    <div id="roleBanner" class="role-banner">
+      <span id="roleText">Determining access level...</span>
+    </div>
     
     <div class="connection-info">
       <div class="user-count" id="userCount">👥 Connecting...</div>
@@ -179,20 +280,34 @@
       </div>
     </div>
     
-    <div class="controls">
-      <button id="startBtn" class="btn btn-primary">🎤 Start Listening</button>
+    <!-- Pastor Controls (only visible for Joshua) -->
+    <div id="pastorControls" class="controls hidden">
+      <button id="startBtn" class="btn btn-primary">🎤 Start Preaching</button>
       <button id="stopBtn" class="btn btn-danger" disabled>⏹️ Stop</button>
     </div>
     
-    <div id="status" class="status">Ready to start speech recognition</div>
+    <!-- Congregation Message (visible for non-Joshua users) -->
+    <div id="congregationMessage" class="viewer-message hidden">
+      <h3>👥 Welcome to the Service</h3>
+      <p>You are viewing live translations of the sermon. The pastor's words will appear below in both English and Korean.</p>
+      <div class="live-indicator">
+        <span class="live-dot"></span>
+        <span>LIVE TRANSLATION</span>
+      </div>
+    </div>
+    
+    <div id="status" class="status">Ready to connect</div>
     
     <div id="output"></div>
   </div>
 
 <script>
-  // Generate unique user ID
+  // Get username from user
+  const username = prompt("Enter your name:") || `Guest-${Math.random().toString(36).substr(2, 4)}`;
+  
+  // Check if user is pastor (Joshua)
+  const isPastor = username.toLowerCase() === 'joshua';
   const userId = 'user_' + Math.random().toString(36).substr(2, 9);
-  const username = prompt("Enter your name (optional):") || `Speaker-${userId.slice(-4)}`;
 
   // WebSocket connection
   const scheme = location.protocol === "https:" ? "wss" : "ws";
@@ -201,6 +316,10 @@
   let wsConnected = false;
 
   // DOM elements
+  const roleBanner = document.getElementById('roleBanner');
+  const roleText = document.getElementById('roleText');
+  const pastorControls = document.getElementById('pastorControls');
+  const congregationMessage = document.getElementById('congregationMessage');
   const startBtn = document.getElementById('startBtn');
   const stopBtn = document.getElementById('stopBtn');
   const status = document.getElementById('status');
@@ -209,10 +328,31 @@
   const connectionStatus = document.getElementById('connectionStatus');
   const statusDot = document.getElementById('statusDot');
 
-  // Speech recognition
+  // Speech recognition (only for pastor)
   let recognition = null;
   let isListening = false;
   let interimElement = null;
+
+  // Initialize UI based on role
+  function initializeRole() {
+    if (isPastor) {
+      // Pastor mode
+      roleBanner.className = 'role-banner pastor';
+      roleText.innerHTML = '🎙️ Pastor Mode - You can speak and your words will be translated for the congregation';
+      pastorControls.classList.remove('hidden');
+      congregationMessage.classList.add('hidden');
+      status.textContent = 'Ready to start preaching';
+      status.className = 'status';
+    } else {
+      // Congregation mode
+      roleBanner.className = 'role-banner congregation';
+      roleText.innerHTML = '👥 Congregation Mode - You are viewing live translations of the sermon';
+      pastorControls.classList.add('hidden');
+      congregationMessage.classList.remove('hidden');
+      status.textContent = 'Waiting for the pastor to begin...';
+      status.className = 'status waiting';
+    }
+  }
 
   // Initialize WebSocket
   function connectWebSocket() {
@@ -223,6 +363,13 @@
         wsConnected = true;
         updateConnectionStatus('Connected', true);
         console.log('WebSocket connected');
+        
+        // Send role information
+        ws.send(JSON.stringify({
+          type: 'role_update',
+          role: isPastor ? 'pastor' : 'congregation',
+          username: username
+        }));
       };
 
       ws.onmessage = (event) => {
@@ -270,7 +417,10 @@
         break;
         
       case 'translation':
-        displayTranslation(data, false); // false = remote translation
+        // Only show translations from pastor
+        if (data.role === 'pastor') {
+          displayTranslation(data, data.user_id === userId);
+        }
         break;
         
       case 'pong':
@@ -282,7 +432,7 @@
     }
   }
 
-  function displayTranslation(data, isOwn = true) {
+  function displayTranslation(data, isOwn = false) {
     // Remove interim element if exists
     if (interimElement) {
       interimElement.remove();
@@ -290,13 +440,18 @@
     }
 
     const pair = document.createElement('div');
-    pair.className = `pair ${isOwn ? 'own' : 'remote'}`;
+    pair.className = `pair ${data.role || 'pastor'}`;
     
     const timestamp = new Date(data.timestamp || Date.now()).toLocaleTimeString();
     
     pair.innerHTML = `
       <div class="speaker-info">
-        <span>${isOwn ? 'You' : data.username}</span>
+        <div class="speaker-role">
+          <span class="${data.role === 'pastor' ? 'pastor-icon' : 'congregation-icon'}">
+            ${data.role === 'pastor' ? '🎙️' : '👥'}
+          </span>
+          <span>${isOwn ? 'You' : data.username} ${data.role === 'pastor' ? '(Pastor)' : ''}</span>
+        </div>
         <span class="timestamp">${timestamp}</span>
       </div>
       <div class="transcript">${data.text}</div>
@@ -313,6 +468,12 @@
       return;
     }
 
+    // Only pastor can broadcast
+    if (!isPastor) {
+      console.warn('Only pastor can broadcast translations');
+      return;
+    }
+
     try {
       const response = await fetch('/api/broadcast-translation', {
         method: 'POST',
@@ -324,6 +485,7 @@
           translation: translation,
           user_id: userId,
           username: username,
+          role: 'pastor',
           from_lang: 'en',
           to_lang: 'ko'
         })
@@ -337,8 +499,13 @@
     }
   }
 
-  // Initialize speech recognition
+  // Initialize speech recognition (only for pastor)
   function initSpeechRecognition() {
+    if (!isPastor) {
+      console.log('Speech recognition disabled - congregation mode');
+      return false;
+    }
+
     if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
       status.innerHTML = 'Speech Recognition not supported in this browser. Try Chrome.';
       status.className = 'status error';
@@ -356,7 +523,7 @@
       isListening = true;
       startBtn.disabled = true;
       stopBtn.disabled = false;
-      status.textContent = '🎤 Listening... Speak now!';
+      status.textContent = '🎙️ Preaching... Your words are being translated live!';
       status.className = 'status listening';
     };
 
@@ -399,7 +566,10 @@
         }
         interimElement.innerHTML = `
           <div class="speaker-info">
-            <span>You (speaking...)</span>
+            <div class="speaker-role">
+              <span class="pastor-icon">🎙️</span>
+              <span>You (Pastor) - Speaking...</span>
+            </div>
             <span class="timestamp">${new Date().toLocaleTimeString()}</span>
           </div>
           <div class="transcript">${interimTranscript}</div>
@@ -418,12 +588,13 @@
             text: finalTranscript.trim(),
             translation: translation,
             timestamp: new Date().toISOString(),
-            username: username
+            username: username,
+            role: 'pastor'
           };
           
           displayTranslation(translationData, true);
           
-          // Broadcast to other users
+          // Broadcast to congregation
           await broadcastTranslation(finalTranscript.trim(), translation);
           
         } catch (error) {
@@ -434,10 +605,13 @@
           }
           
           const pair = document.createElement('div');
-          pair.className = 'pair own';
+          pair.className = 'pair pastor';
           pair.innerHTML = `
             <div class="speaker-info">
-              <span>You</span>
+              <div class="speaker-role">
+                <span class="pastor-icon">🎙️</span>
+                <span>You (Pastor)</span>
+              </div>
               <span class="timestamp">${new Date().toLocaleTimeString()}</span>
             </div>
             <div class="transcript">${finalTranscript.trim()}</div>
@@ -472,18 +646,20 @@
     return data.translation;
   }
 
-  // Event listeners
-  startBtn.addEventListener('click', () => {
-    if (recognition) {
-      recognition.start();
-    }
-  });
+  // Event listeners (only for pastor)
+  if (isPastor) {
+    startBtn.addEventListener('click', () => {
+      if (recognition) {
+        recognition.start();
+      }
+    });
 
-  stopBtn.addEventListener('click', () => {
-    if (recognition) {
-      recognition.stop();
-    }
-  });
+    stopBtn.addEventListener('click', () => {
+      if (recognition) {
+        recognition.stop();
+      }
+    });
+  }
 
   // Keep WebSocket alive
   setInterval(() => {
@@ -493,8 +669,11 @@
   }, 30000);
 
   // Initialize everything
+  initializeRole();
   connectWebSocket();
-  initSpeechRecognition();
+  if (isPastor) {
+    initSpeechRecognition();
+  }
 </script>
 </body>
 </html>
