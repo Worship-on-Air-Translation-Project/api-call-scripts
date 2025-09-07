@@ -28,7 +28,7 @@ if lsof -ti:8000 >/dev/null; then
 fi
 
 echo "Starting server"
-python3 translator-app.py &
+python3 translator_app.py &
 
 SERVER_PID=$!
 
