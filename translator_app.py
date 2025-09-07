@@ -1,11 +1,17 @@
 import os
 import requests
+import uuid
+import logging
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from pathlib import Path
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Load environment variables
 load_dotenv()
@@ -43,13 +49,20 @@ async def translate_text(request: TranslationRequest):
     """
     Translate text using Azure Translator API
     """
+    logger.info(f"Translation request: {request.text[:50]}... from {request.from_lang} to {request.to_lang}")
+    
     try:
-        # Azure Translator configuration
+        # Validate environment variables
         translator_key = os.getenv("TRANSLATOR_KEY")
         translator_region = os.getenv("TRANSLATOR_REGION")
         
         if not translator_key:
+            logger.error("TRANSLATOR_KEY environment variable not set")
             raise HTTPException(status_code=500, detail="Translator API key not configured")
+        
+        if not translator_region:
+            logger.error("TRANSLATOR_REGION environment variable not set")
+            raise HTTPException(status_code=500, detail="Translator region not configured")
         
         # Azure Translator endpoint
         endpoint = "https://api.cognitive.microsofttranslator.com"
@@ -73,33 +86,60 @@ async def translate_text(request: TranslationRequest):
             'text': request.text
         }]
         
+        logger.info(f"Making request to: {constructed_url}")
+        logger.info(f"Request params: {params}")
+        logger.info(f"Request body: {body}")
+        
         # Make the translation request
-        response = requests.post(constructed_url, params=params, headers=headers, json=body)
+        response = requests.post(
+            constructed_url, 
+            params=params, 
+            headers=headers, 
+            json=body,
+            timeout=30  # Add timeout
+        )
+        
+        logger.info(f"Response status: {response.status_code}")
+        logger.info(f"Response headers: {dict(response.headers)}")
         
         if response.status_code != 200:
-            raise HTTPException(status_code=response.status_code, detail="Translation API error")
+            error_text = response.text
+            logger.error(f"Translation API error: {response.status_code} - {error_text}")
+            raise HTTPException(
+                status_code=response.status_code, 
+                detail=f"Translation API error: {error_text}"
+            )
         
         result = response.json()
+        logger.info(f"Translation result: {result}")
         
         if result and len(result) > 0 and 'translations' in result[0]:
             translated_text = result[0]['translations'][0]['text']
+            logger.info(f"Translation successful: {translated_text}")
             return TranslationResponse(
                 translation=translated_text,
                 original=request.text
             )
         else:
-            raise HTTPException(status_code=500, detail="Unexpected translation response format")
+            logger.error(f"Unexpected translation response format: {result}")
+            raise HTTPException(
+                status_code=500, 
+                detail=f"Unexpected translation response format: {result}"
+            )
             
     except requests.RequestException as e:
+        logger.error(f"Network error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Network error: {str(e)}")
     except Exception as e:
+        logger.error(f"Translation error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Translation error: {str(e)}")
 
 @app.get("/health")
 def health_check():
     return {"status": "healthy"}
 
+
 if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv("PORT", "8000"))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")
