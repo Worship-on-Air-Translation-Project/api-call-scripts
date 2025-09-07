@@ -25,135 +25,72 @@
       color: #0ea5e9;
     }
 
-    /* Name Entry Modal */
-    .name-modal {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0, 0, 0, 0.8);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 1000;
-    }
-
-    .name-modal-content {
-      background: white;
-      padding: 40px;
-      border-radius: 15px;
-      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
-      text-align: center;
-      max-width: 400px;
-      width: 90%;
-    }
-
-    .name-modal h2 {
-      color: #0ea5e9;
-      margin-bottom: 20px;
-    }
-
-    .name-input {
-      width: 100%;
+    .auto-listen-banner {
       padding: 15px;
-      font-size: 16px;
-      border: 2px solid #e2e8f0;
-      border-radius: 8px;
       margin: 20px 0;
-      box-sizing: border-box;
-    }
-
-    .name-input:focus {
-      outline: none;
-      border-color: #0ea5e9;
-    }
-
-    .name-submit {
-      background: #0ea5e9;
+      border-radius: 8px;
+      background: linear-gradient(135deg, #10b981, #059669);
       color: white;
-      padding: 15px 30px;
-      border: none;
-      border-radius: 8px;
-      font-size: 16px;
-      cursor: pointer;
-      width: 100%;
-    }
-
-    .name-submit:hover {
-      background: #0284c7;
-    }
-
-    /* Role Banners */
-    .role-banner {
-      padding: 20px;
-      margin: 20px 0;
-      border-radius: 10px;
       font-weight: bold;
-      font-size: 18px;
+      font-size: 16px;
       box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     }
 
-    .role-banner.pastor {
-      background: linear-gradient(135deg, #0ea5e9, #3b82f6);
-      color: white;
-    }
-
-    .role-banner.congregation {
-      background: linear-gradient(135deg, #10b981, #059669);
-      color: white;
-    }
-
-    /* Connection Info */
-    .connection-info {
+    .listening-indicator {
       display: flex;
-      justify-content: space-between;
       align-items: center;
-      margin: 15px 0;
-      padding: 12px;
-      background: #e2e8f0;
+      justify-content: center;
+      gap: 10px;
+      margin: 20px 0;
+      padding: 15px;
+      background: #dbeafe;
       border-radius: 8px;
-      font-size: 14px;
+      border: 2px solid #0ea5e9;
     }
 
-    .user-count {
-      color: #059669;
-      font-weight: bold;
+    .listening-indicator.active {
+      background: #dcfce7;
+      border-color: #10b981;
     }
 
-    .connection-status {
-      display: flex;
-      align-items: center;
-      gap: 8px;
+    .listening-indicator.error {
+      background: #fecaca;
+      border-color: #ef4444;
     }
 
-    .status-dot {
-      width: 10px;
-      height: 10px;
+    .pulse-dot {
+      width: 12px;
+      height: 12px;
+      background: #0ea5e9;
       border-radius: 50%;
-      background: #ef4444;
+      animation: pulse 1.5s infinite;
     }
 
-    .status-dot.connected {
+    .pulse-dot.active {
       background: #10b981;
     }
 
-    /* Status Messages */
+    .pulse-dot.error {
+      background: #ef4444;
+    }
+
+    @keyframes pulse {
+      0% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(1.2); }
+      100% { opacity: 1; transform: scale(1); }
+    }
+
     .status {
       padding: 12px;
       margin: 15px 0;
       border-radius: 8px;
       font-weight: bold;
+      font-size: 14px;
     }
 
     .status.listening {
       background: #dcfce7;
       color: #166534;
-    }
-
-    .status.waiting {
-      background: #fef3c7;
-      color: #92400e;
     }
 
     .status.error {
@@ -162,54 +99,29 @@
     }
 
     .status.initializing {
-      background: #e0e7ff;
-      color: #3730a3;
+      background: #fef3c7;
+      color: #92400e;
     }
 
-    /* Congregation Messages */
-    .congregation-message {
-      padding: 25px;
+    .permission-notice {
+      padding: 20px;
       margin: 20px 0;
-      background: #f0fdf4;
-      border: 2px dashed #10b981;
-      border-radius: 12px;
-      color: #065f46;
+      background: #fef3c7;
+      border: 2px dashed #f59e0b;
+      border-radius: 10px;
+      color: #92400e;
     }
 
-    .congregation-message h3 {
-      margin: 0 0 15px 0;
-      color: #059669;
+    .permission-notice h3 {
+      margin: 0 0 10px 0;
+      color: #d97706;
     }
 
-    .live-indicator {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      color: #dc2626;
-      font-weight: bold;
-      margin-top: 10px;
-    }
-
-    .live-dot {
-      width: 10px;
-      height: 10px;
-      background: #dc2626;
-      border-radius: 50%;
-      animation: pulse 1.5s infinite;
-    }
-
-    @keyframes pulse {
-      0% { opacity: 1; }
-      50% { opacity: 0.5; }
-      100% { opacity: 1; }
-    }
-
-    /* Output Area */
     #output {
       margin-top: 30px;
       background: #e2e8f0;
-      padding: 20px;
-      border-radius: 12px;
+      padding: 16px;
+      border-radius: 10px;
       height: 400px;
       overflow-y: auto;
       text-align: left;
@@ -217,8 +129,8 @@
 
     .pair {
       margin-bottom: 20px;
-      padding: 15px;
-      border-radius: 10px;
+      padding: 12px;
+      border-radius: 8px;
       border-left: 4px solid #0ea5e9;
       background: #eff6ff;
     }
@@ -233,22 +145,15 @@
     .speaker-info {
       font-size: 12px;
       color: #64748b;
-      margin-bottom: 10px;
+      margin-bottom: 8px;
       display: flex;
       justify-content: space-between;
       align-items: center;
     }
 
-    .speaker-name {
-      font-weight: bold;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-
     .transcript {
       font-weight: bold;
-      margin-bottom: 10px;
+      margin-bottom: 8px;
       color: #111827;
       font-size: 16px;
     }
@@ -256,9 +161,9 @@
     .translation {
       color: #334155;
       font-size: 15px;
-      padding: 10px;
-      background: rgba(255, 255, 255, 0.7);
-      border-radius: 6px;
+      padding: 8px;
+      background: rgba(255, 255, 255, 0.5);
+      border-radius: 5px;
     }
 
     .timestamp {
@@ -266,303 +171,114 @@
       color: #9ca3af;
     }
 
-    .hidden {
-      display: none;
+    .restart-info {
+      font-size: 12px;
+      color: #64748b;
+      margin-top: 10px;
+      font-style: italic;
     }
   </style>
 </head>
 <body>
-  <!-- Name Entry Modal -->
-  <div id="nameModal" class="name-modal">
-    <div class="name-modal-content">
-      <h2>🙏 Welcome to Worship On Air</h2>
-      <p>Please enter your name to join the service:</p>
-      <input type="text" id="nameInput" class="name-input" placeholder="Enter your name..." autocomplete="off">
-      <button id="nameSubmit" class="name-submit">Join Service</button>
-    </div>
-  </div>
-
-  <!-- Main Application -->
-  <div class="wrapper" id="mainApp" style="display: none;">
+  <div class="wrapper">
     <h1>🙏 Worship On Air - Live Translation</h1>
+    <p><em>Automatic Speech Recognition & Translation</em></p>
     
-    <!-- Role Banner -->
-    <div id="roleBanner" class="role-banner">
-      <span id="roleText">Connecting...</span>
+    <div class="auto-listen-banner">
+      🎤 Auto-Listen Mode: Continuous speech recognition is active
     </div>
     
-    <!-- Connection Info -->
-    <div class="connection-info">
-      <div class="user-count" id="userCount">👥 Connecting...</div>
-      <div class="connection-status">
-        <span class="status-dot" id="statusDot"></span>
-        <span id="connectionStatus">Connecting...</span>
-      </div>
+    <div id="listeningIndicator" class="listening-indicator">
+      <div id="pulseDot" class="pulse-dot"></div>
+      <span id="listeningText">Initializing speech recognition...</span>
     </div>
     
-    <!-- Congregation Message -->
-    <div id="congregationMessage" class="congregation-message hidden">
-      <h3>👥 Welcome to the Live Service</h3>
-      <p>You are viewing live translations of Pastor Joshua's sermon. His words will appear below in both English and Korean.</p>
-      <div class="live-indicator">
-        <span class="live-dot"></span>
-        <span>LIVE TRANSLATION</span>
-      </div>
+    <div id="permissionNotice" class="permission-notice" style="display: none;">
+      <h3>🎤 Microphone Permission Required</h3>
+      <p>Please allow microphone access when prompted by your browser to enable automatic speech recognition.</p>
     </div>
     
-    <!-- Status -->
-    <div id="status" class="status waiting">Waiting to connect...</div>
+    <div id="status" class="status initializing">Starting automatic speech recognition...</div>
     
-    <!-- Translation Output -->
     <div id="output"></div>
+    
+    <div class="restart-info">
+      Speech recognition will automatically restart if interrupted
+    </div>
   </div>
 
 <script>
-  // Global variables
-  let username = '';
-  let userId = '';
-  let isPastor = false;
-  let ws = null;
-  let wsConnected = false;
+  // DOM elements
+  const listeningIndicator = document.getElementById('listeningIndicator');
+  const pulseDot = document.getElementById('pulseDot');
+  const listeningText = document.getElementById('listeningText');
+  const permissionNotice = document.getElementById('permissionNotice');
+  const status = document.getElementById('status');
+  const output = document.getElementById('output');
+
+  // Speech recognition variables
   let recognition = null;
   let isListening = false;
   let interimElement = null;
   let autoRestartTimeout = null;
+  let restartAttempts = 0;
+  const maxRestartAttempts = 5;
 
-  // DOM elements
-  const nameModal = document.getElementById('nameModal');
-  const nameInput = document.getElementById('nameInput');
-  const nameSubmit = document.getElementById('nameSubmit');
-  const mainApp = document.getElementById('mainApp');
-  const roleBanner = document.getElementById('roleBanner');
-  const roleText = document.getElementById('roleText');
-  const congregationMessage = document.getElementById('congregationMessage');
-  const status = document.getElementById('status');
-  const output = document.getElementById('output');
-  const userCount = document.getElementById('userCount');
-  const connectionStatus = document.getElementById('connectionStatus');
-  const statusDot = document.getElementById('statusDot');
-
-  // Name entry handling
-  function showNameModal() {
-    nameModal.style.display = 'flex';
-    nameInput.focus();
-  }
-
-  function hideNameModal() {
-    nameModal.style.display = 'none';
-    mainApp.style.display = 'block';
-  }
-
-  function submitName() {
-    const name = nameInput.value.trim();
-    if (name) {
-      username = name;
-      userId = 'user_' + Math.random().toString(36).substr(2, 9);
-      isPastor = name.toLowerCase() === 'joshua';
-      
-      hideNameModal();
-      initializeApp();
-    } else {
-      nameInput.focus();
-    }
-  }
-
-  // Event listeners for name entry
-  nameSubmit.addEventListener('click', submitName);
-  nameInput.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') {
-      submitName();
-    }
-  });
-
-  // Initialize the main application
-  function initializeApp() {
-    setupUI();
-    connectWebSocket();
-    if (isPastor) {
-      initSpeechRecognition();
-    }
-  }
-
-  // Setup UI based on role
-  function setupUI() {
-    if (isPastor) {
-      // Pastor mode
-      roleBanner.className = 'role-banner pastor';
-      roleText.innerHTML = `🎙️ Pastor Mode - Welcome, ${username}! Your words will be translated for the congregation.`;
-      congregationMessage.classList.add('hidden');
-      status.textContent = 'Preparing speech recognition...';
-      status.className = 'status initializing';
-    } else {
-      // Congregation mode
-      roleBanner.className = 'role-banner congregation';
-      roleText.innerHTML = `👥 Congregation Mode - Welcome, ${username}! You will see live translations of Pastor Joshua's sermon.`;
-      congregationMessage.classList.remove('hidden');
-      status.textContent = 'Waiting for Pastor Joshua to begin speaking...';
-      status.className = 'status waiting';
-    }
-  }
-
-  // WebSocket connection
-  function connectWebSocket() {
-    try {
-      const scheme = location.protocol === "https:" ? "wss" : "ws";
-      const wsUrl = `${scheme}://${location.host}/ws/${userId}?username=${encodeURIComponent(username)}`;
-      
-      ws = new WebSocket(wsUrl);
-      
-      ws.onopen = () => {
-        wsConnected = true;
-        updateConnectionStatus('Connected', true);
-        console.log('WebSocket connected');
-      };
-
-      ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          handleWebSocketMessage(data);
-        } catch (e) {
-          console.error('Error parsing WebSocket message:', e);
-        }
-      };
-
-      ws.onclose = () => {
-        wsConnected = false;
-        updateConnectionStatus('Disconnected', false);
-        console.log('WebSocket disconnected');
-        
-        // Attempt to reconnect after 3 seconds
-        setTimeout(connectWebSocket, 3000);
-      };
-
-      ws.onerror = (error) => {
-        console.error('WebSocket error:', error);
-        updateConnectionStatus('Connection Error', false);
-      };
-
-    } catch (error) {
-      console.error('Failed to create WebSocket:', error);
-      updateConnectionStatus('Failed to Connect', false);
-    }
-  }
-
-  function updateConnectionStatus(statusText, connected) {
-    connectionStatus.textContent = statusText;
-    statusDot.className = connected ? 'status-dot connected' : 'status-dot';
-  }
-
-  function handleWebSocketMessage(data) {
-    switch(data.type) {
-      case 'welcome':
-        console.log('Welcome message:', data.message);
-        if (isPastor) {
-          status.textContent = 'Ready to start speaking. Your words will be translated automatically.';
-          status.className = 'status initializing';
-        }
-        break;
-        
-      case 'user_update':
-        const totalUsers = data.total_users || 0;
-        const pastorOnline = data.pastor_online || false;
-        userCount.textContent = `👥 ${totalUsers} user${totalUsers !== 1 ? 's' : ''} online`;
-        
-        if (!isPastor && !pastorOnline) {
-          status.textContent = 'Waiting for Pastor Joshua to join...';
-          status.className = 'status waiting';
-        }
-        break;
-        
-      case 'translation':
-        displayTranslation(data);
-        break;
-        
-      case 'pong':
-        // Keep-alive response
-        break;
-        
-      default:
-        console.log('Unknown message type:', data.type);
-    }
-  }
-
-  function displayTranslation(data) {
-    // Remove interim element if exists
-    if (interimElement) {
-      interimElement.remove();
-      interimElement = null;
-    }
-
-    const pair = document.createElement('div');
-    pair.className = 'pair';
-    
-    const timestamp = new Date(data.timestamp || Date.now()).toLocaleTimeString();
-    
-    pair.innerHTML = `
-      <div class="speaker-info">
-        <div class="speaker-name">
-          <span>🎙️</span>
-          <span>Pastor ${data.username}</span>
-        </div>
-        <span class="timestamp">${timestamp}</span>
-      </div>
-      <div class="transcript">${data.text}</div>
-      <div class="translation">${data.translation}</div>
-    `;
-    
-    output.appendChild(pair);
-    output.scrollTop = output.scrollHeight;
-  }
-
-  async function broadcastTranslation(text, translation) {
-    if (!wsConnected || !isPastor) return;
-
-    try {
-      const response = await fetch('/api/broadcast-translation', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          text: text,
-          translation: translation,
-          user_id: userId,
-          username: username,
-          from_lang: 'en',
-          to_lang: 'ko'
-        })
-      });
-
-      if (!response.ok) {
-        console.error('Failed to broadcast translation');
-      }
-    } catch (error) {
-      console.error('Error broadcasting translation:', error);
-    }
-  }
-
-  // Speech recognition (Pastor only)
-  function initSpeechRecognition() {
-    if (!isPastor) return;
-
+  // Check for browser support
+  function checkBrowserSupport() {
     if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-      status.textContent = 'Speech Recognition not supported in this browser. Please use Chrome.';
-      status.className = 'status error';
-      return;
+      updateStatus('Browser not supported. Please use Chrome or Edge.', 'error');
+      updateListeningIndicator('Browser not supported', 'error');
+      return false;
     }
+    return true;
+  }
+
+  // Update listening indicator
+  function updateListeningIndicator(text, state = 'default') {
+    listeningText.textContent = text;
+    
+    // Reset classes
+    listeningIndicator.className = 'listening-indicator';
+    pulseDot.className = 'pulse-dot';
+    
+    // Add state-specific classes
+    if (state === 'active') {
+      listeningIndicator.classList.add('active');
+      pulseDot.classList.add('active');
+    } else if (state === 'error') {
+      listeningIndicator.classList.add('error');
+      pulseDot.classList.add('error');
+    }
+  }
+
+  // Update status message
+  function updateStatus(message, type = 'default') {
+    status.textContent = message;
+    status.className = `status ${type}`;
+  }
+
+  // Initialize speech recognition
+  function initSpeechRecognition() {
+    if (!checkBrowserSupport()) return false;
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     recognition = new SpeechRecognition();
     
+    // Configure recognition
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.lang = 'en-US';
 
+    // Event handlers
     recognition.onstart = () => {
       isListening = true;
-      status.textContent = '🎙️ Listening... Your words are being translated live for the congregation!';
-      status.className = 'status listening';
+      restartAttempts = 0;
+      updateListeningIndicator('🎤 Listening for speech...', 'active');
+      updateStatus('Listening... Speak naturally and your words will be translated.', 'listening');
+      permissionNotice.style.display = 'none';
       
+      // Clear any pending restart timeout
       if (autoRestartTimeout) {
         clearTimeout(autoRestartTimeout);
         autoRestartTimeout = null;
@@ -571,34 +287,34 @@
 
     recognition.onend = () => {
       isListening = false;
-      status.textContent = 'Restarting speech recognition...';
-      status.className = 'status initializing';
+      updateListeningIndicator('🔄 Restarting speech recognition...', 'default');
+      updateStatus('Restarting speech recognition...', 'initializing');
       
-      // Auto-restart
-      autoRestartTimeout = setTimeout(() => {
-        if (!isListening) {
-          try {
-            recognition.start();
-          } catch (error) {
-            console.error('Failed to restart recognition:', error);
-            status.textContent = 'Speech recognition error. Please refresh the page.';
-            status.className = 'status error';
-          }
-        }
-      }, 1000);
+      // Auto-restart after a short delay
+      if (restartAttempts < maxRestartAttempts) {
+        autoRestartTimeout = setTimeout(() => {
+          restartAttempts++;
+          startRecognition();
+        }, 1000);
+      } else {
+        updateListeningIndicator('❌ Too many restart attempts', 'error');
+        updateStatus('Speech recognition failed after multiple attempts. Please refresh the page.', 'error');
+      }
     };
 
     recognition.onerror = (event) => {
       console.error('Speech recognition error:', event.error);
       
       if (event.error === 'not-allowed') {
-        status.textContent = 'Microphone access denied. Please allow microphone permission and refresh.';
-        status.className = 'status error';
+        permissionNotice.style.display = 'block';
+        updateListeningIndicator('❌ Microphone permission denied', 'error');
+        updateStatus('Microphone access denied. Please allow microphone permission and refresh the page.', 'error');
       } else if (event.error === 'no-speech') {
+        // This is normal - just continue listening
         console.log('No speech detected, continuing...');
       } else {
-        status.textContent = `Speech recognition error: ${event.error}`;
-        status.className = 'status error';
+        updateListeningIndicator(`❌ Error: ${event.error}`, 'error');
+        updateStatus(`Speech recognition error: ${event.error}`, 'error');
       }
     };
 
@@ -626,10 +342,7 @@
         
         interimElement.innerHTML = `
           <div class="speaker-info">
-            <div class="speaker-name">
-              <span>🎙️</span>
-              <span>Pastor ${username} (speaking...)</span>
-            </div>
+            <span>🎤 Speaking...</span>
             <span class="timestamp">${new Date().toLocaleTimeString()}</span>
           </div>
           <div class="transcript">${interimTranscript}</div>
@@ -640,38 +353,39 @@
 
       // Process final results
       if (finalTranscript.trim()) {
+        // Remove interim element
+        if (interimElement) {
+          interimElement.remove();
+          interimElement = null;
+        }
+
         try {
+          updateListeningIndicator('🔄 Translating...', 'default');
           const translation = await translateText(finalTranscript.trim());
-          
-          // Display locally first
-          const translationData = {
-            text: finalTranscript.trim(),
-            translation: translation,
-            timestamp: new Date().toISOString(),
-            username: username
-          };
-          
-          displayTranslation(translationData);
-          
-          // Broadcast to congregation
-          await broadcastTranslation(finalTranscript.trim(), translation);
-          
-        } catch (error) {
-          console.error('Translation error:', error);
-          
-          if (interimElement) {
-            interimElement.remove();
-            interimElement = null;
-          }
           
           const pair = document.createElement('div');
           pair.className = 'pair';
           pair.innerHTML = `
             <div class="speaker-info">
-              <div class="speaker-name">
-                <span>🎙️</span>
-                <span>Pastor ${username}</span>
-              </div>
+              <span>🎤 Speech Recognition</span>
+              <span class="timestamp">${new Date().toLocaleTimeString()}</span>
+            </div>
+            <div class="transcript">${finalTranscript.trim()}</div>
+            <div class="translation">${translation}</div>
+          `;
+          output.appendChild(pair);
+          output.scrollTop = output.scrollHeight;
+          
+          updateListeningIndicator('🎤 Listening for speech...', 'active');
+          
+        } catch (error) {
+          console.error('Translation error:', error);
+          
+          const pair = document.createElement('div');
+          pair.className = 'pair';
+          pair.innerHTML = `
+            <div class="speaker-info">
+              <span>🎤 Speech Recognition</span>
               <span class="timestamp">${new Date().toLocaleTimeString()}</span>
             </div>
             <div class="transcript">${finalTranscript.trim()}</div>
@@ -679,22 +393,30 @@
           `;
           output.appendChild(pair);
           output.scrollTop = output.scrollHeight;
+          
+          updateListeningIndicator('🎤 Listening for speech...', 'active');
         }
       }
     };
 
-    // Auto-start recognition
-    setTimeout(() => {
+    return true;
+  }
+
+  // Start recognition
+  function startRecognition() {
+    if (recognition && !isListening) {
       try {
+        updateListeningIndicator('🔄 Starting speech recognition...', 'default');
         recognition.start();
       } catch (error) {
         console.error('Failed to start recognition:', error);
-        status.textContent = 'Failed to start speech recognition. Please refresh the page.';
-        status.className = 'status error';
+        updateListeningIndicator('❌ Failed to start', 'error');
+        updateStatus('Failed to start speech recognition. Please refresh the page.', 'error');
       }
-    }, 1000);
+    }
   }
 
+  // Translation function
   async function translateText(text) {
     try {
       const response = await fetch('/api/translate', {
@@ -721,27 +443,27 @@
     }
   }
 
-  // Keep WebSocket alive
-  setInterval(() => {
-    if (ws && wsConnected) {
-      ws.send(JSON.stringify({type: 'ping'}));
-    }
-  }, 30000);
-
-  // Handle page visibility changes
-  document.addEventListener('visibilitychange', () => {
-    if (!document.hidden && isPastor && recognition && !isListening) {
+  // Initialize everything when page loads
+  document.addEventListener('DOMContentLoaded', () => {
+    updateStatus('Initializing speech recognition...', 'initializing');
+    
+    if (initSpeechRecognition()) {
+      // Small delay to ensure proper initialization
       setTimeout(() => {
-        try {
-          recognition.start();
-        } catch (error) {
-          console.error('Failed to restart recognition on visibility change:', error);
-        }
-      }, 1000);
+        startRecognition();
+      }, 500);
     }
   });
 
-  // Clean up on page unload
+  // Handle page visibility changes (restart when page becomes visible)
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && recognition && !isListening && restartAttempts < maxRestartAttempts) {
+      console.log('Page became visible, restarting recognition...');
+      setTimeout(startRecognition, 1000);
+    }
+  });
+
+  // Handle page unload
   window.addEventListener('beforeunload', () => {
     if (recognition && isListening) {
       recognition.stop();
@@ -749,13 +471,7 @@
     if (autoRestartTimeout) {
       clearTimeout(autoRestartTimeout);
     }
-    if (ws) {
-      ws.close();
-    }
   });
-
-  // Initialize the app
-  showNameModal();
 </script>
 </body>
 </html>
