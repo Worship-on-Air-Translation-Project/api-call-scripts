@@ -60,47 +60,52 @@
     <div id="output"></div>
   </div>
 
-  <script>
-    const ws = new WebSocket("ws://localhost:8000/ws/translate");
-    const output = document.getElementById("output");
+<script>
+  // Build WebSocket URL dynamically
+  const scheme = location.protocol === "https:" ? "wss" : "ws";
+  const wsUrl = `${scheme}://${location.host}/ws/translate`;
+  const ws = new WebSocket(wsUrl);
 
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
+  const output = document.getElementById("output");
 
-        if (data.transcript && data.translation) {
-          const pair = document.createElement("div");
-          pair.className = "pair";
+  ws.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data);
 
-          const transcript = document.createElement("div");
-          transcript.className = "transcript";
-          transcript.textContent = data.transcript;
+      if (data.transcript && data.translation) {
+        const pair = document.createElement("div");
+        pair.className = "pair";
 
-          const translation = document.createElement("div");
-          translation.className = "translation";
-          translation.textContent = data.translation;
+        const transcript = document.createElement("div");
+        transcript.className = "transcript";
+        transcript.textContent = data.transcript;
 
-          pair.appendChild(transcript);
-          pair.appendChild(translation);
+        const translation = document.createElement("div");
+        translation.className = "translation";
+        translation.textContent = data.translation;
 
-          output.appendChild(pair);
+        pair.appendChild(transcript);
+        pair.appendChild(translation);
 
-          // Auto-scroll
-          output.scrollTop = output.scrollHeight;
-        } else {
-          console.log("Message:", data);
-        }
-      } catch (e) {
-        console.warn("Non-JSON message:", event.data);
+        output.appendChild(pair);
+
+        // Auto-scroll
+        output.scrollTop = output.scrollHeight;
+      } else {
+        console.log("Message:", data);
       }
-    };
+    } catch (e) {
+      console.warn("Non-JSON message:", event.data);
+    }
+  };
 
-    ws.onerror = () => {
-      const errorLine = document.createElement("div");
-      errorLine.textContent = "[WebSocket Error]";
-      errorLine.style.color = "red";
-      output.appendChild(errorLine);
-    };
-  </script>
+  ws.onerror = () => {
+    const errorLine = document.createElement("div");
+    errorLine.textContent = "[WebSocket Error]";
+    errorLine.style.color = "red";
+    output.appendChild(errorLine);
+  };
+</script>
+
 </body>
 </html>
