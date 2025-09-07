@@ -1,102 +1,105 @@
-import azure.cognitiveservices.speech as speechsdk
 import os
-import asyncio
-from fastapi import FastAPI, WebSocket
+import requests
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from dotenv import load_dotenv
-
-from pathlib import Path
 from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
+from dotenv import load_dotenv
+from pathlib import Path
 
-BASE_DIR = Path(__file__).resolve().parent
-INDEX_PATH = BASE_DIR / "index.html"
-STATIC_DIR = BASE_DIR / "static"
-
-import uvicorn
-
-# Load env vars
+# Load environment variables
 load_dotenv()
-speech_key = os.getenv("SPEECH_KEY")
-speech_region = os.getenv("SPEECH_REGION")
 
-app = FastAPI()
+app = FastAPI(title="Azure Translation API")
 
-if STATIC_DIR.exists() and STATIC_DIR.is_dir():
-    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
-
-@app.get("/", include_in_schema=False)
-def serve_index():
-    return FileResponse(str(INDEX_PATH))
-
-@app.get("/health", include_in_schema=False)
-def health():
-    return {"status": "ok"}
-
-# Allow frontend
+# CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Change to your domain in production
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-@app.websocket("/ws/translate")
-async def translate_ws(websocket: WebSocket):
-    await websocket.accept()
+# Serve the HTML file
+BASE_DIR = Path(__file__).resolve().parent
+INDEX_PATH = BASE_DIR / "index.html"
 
-    translation_config = speechsdk.translation.SpeechTranslationConfig(
-        subscription=speech_key,
-        region=speech_region
-    )
-    translation_config.speech_recognition_language = "en-US"
-    translation_config.add_target_language("ko")
+@app.get("/")
+def serve_index():
+    return FileResponse(str(INDEX_PATH))
 
-    # Create a push stream for audio
-    stream = speechsdk.audio.PushAudioInputStream()
-    audio_config = speechsdk.audio.AudioConfig(stream=stream)
-    recognizer = speechsdk.translation.TranslationRecognizer(
-        translation_config=translation_config,
-        audio_config=audio_config
-    )
+class TranslationRequest(BaseModel):
+    text: str
+    from_lang: str = "en"
+    to_lang: str = "ko"
 
-    loop = asyncio.get_event_loop()
-    results_queue = asyncio.Queue()
+class TranslationResponse(BaseModel):
+    translation: str
+    original: str
 
-    # Event handler for recognition results
-    def handle_result(evt: speechsdk.translation.TranslationRecognitionEventArgs):
-        if evt.result.reason == speechsdk.ResultReason.TranslatedSpeech:
-            payload = {
-                "transcript": evt.result.text,
-                "translation": evt.result.translations.get("ko", "")
-            }
-            asyncio.run_coroutine_threadsafe(results_queue.put(payload), loop)
-
-    recognizer.recognized.connect(handle_result)
-
-    # Start continuous recognition
-    recognizer.start_continuous_recognition_async()
-
+@app.post("/api/translate", response_model=TranslationResponse)
+async def translate_text(request: TranslationRequest):
+    """
+    Translate text using Azure Translator API
+    """
     try:
-        while True:
-            # Receive mic chunk from browser
-            msg = await websocket.receive_bytes()
-            stream.write(msg)
-
-            # Check if there are translation results ready
-            while not results_queue.empty():
-                payload = await results_queue.get()
-                await websocket.send_json(payload)
-
+        # Azure Translator configuration
+        translator_key = os.getenv("TRANSLATOR_KEY")
+        translator_region = os.getenv("TRANSLATOR_REGION")
+        
+        if not translator_key:
+            raise HTTPException(status_code=500, detail="Translator API key not configured")
+        
+        # Azure Translator endpoint
+        endpoint = "https://api.cognitive.microsofttranslator.com"
+        path = "/translate"
+        constructed_url = endpoint + path
+        
+        params = {
+            'api-version': '3.0',
+            'from': request.from_lang,
+            'to': request.to_lang
+        }
+        
+        headers = {
+            'Ocp-Apim-Subscription-Key': translator_key,
+            'Ocp-Apim-Subscription-Region': translator_region,
+            'Content-type': 'application/json',
+            'X-ClientTraceId': str(uuid.uuid4())
+        }
+        
+        body = [{
+            'text': request.text
+        }]
+        
+        # Make the translation request
+        response = requests.post(constructed_url, params=params, headers=headers, json=body)
+        
+        if response.status_code != 200:
+            raise HTTPException(status_code=response.status_code, detail="Translation API error")
+        
+        result = response.json()
+        
+        if result and len(result) > 0 and 'translations' in result[0]:
+            translated_text = result[0]['translations'][0]['text']
+            return TranslationResponse(
+                translation=translated_text,
+                original=request.text
+            )
+        else:
+            raise HTTPException(status_code=500, detail="Unexpected translation response format")
+            
+    except requests.RequestException as e:
+        raise HTTPException(status_code=500, detail=f"Network error: {str(e)}")
     except Exception as e:
-        await websocket.send_text(f"[Error] {str(e)}")
-    finally:
-        recognizer.stop_continuous_recognition_async()
-        stream.close()
-        await websocket.close()
+        raise HTTPException(status_code=500, detail=f"Translation error: {str(e)}")
+
+@app.get("/health")
+def health_check():
+    return {"status": "healthy"}
 
 if __name__ == "__main__":
-    import os, uvicorn
+    import uvicorn
     port = int(os.getenv("PORT", "8000"))
     uvicorn.run(app, host="0.0.0.0", port=port)
