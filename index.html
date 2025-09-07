@@ -1,157 +1,102 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <title>Live Translation</title>
-  <style>
-    body {
-      margin: 0;
-      padding: 0;
-      background: #f9f9f9;
-      font-family: sans-serif;
-      height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
+import azure.cognitiveservices.speech as speechsdk
+import os
+import asyncio
+from fastapi import FastAPI, WebSocket
+from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv
 
-    .wrapper {
-      text-align: center;
-      width: 90%;
-      max-width: 800px;
-    }
+from pathlib import Path
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
-    h1 {
-      color: #0ea5e9;
-    }
+BASE_DIR = Path(__file__).resolve().parent
+INDEX_PATH = BASE_DIR / "index.html"
+STATIC_DIR = BASE_DIR / "static"
 
-    #output {
-      margin-top: 30px;
-      background: #e2e8f0;
-      padding: 16px;
-      border-radius: 10px;
-      height: 400px;
-      overflow-y: auto;
-      text-align: left;
-    }
+import uvicorn
 
-    .pair {
-      margin-bottom: 20px; /* space between transcript+translation blocks */
-      padding-bottom: 10px;
-      border-bottom: 1px solid #cbd5e1;
-    }
+# Load env vars
+load_dotenv()
+speech_key = os.getenv("SPEECH_KEY")
+speech_region = os.getenv("SPEECH_REGION")
 
-    .transcript {
-      font-weight: bold;
-      margin-bottom: 6px;
-      color: #111827;
-    }
+app = FastAPI()
 
-    .translation {
-      color: #334155;
-    }
-  </style>
-</head>
-<body>
-  <div class="wrapper">
-    <h1>Worship On Air - AI Translation</h1>
-    <p><em>English → Korean</em></p>
+if STATIC_DIR.exists() and STATIC_DIR.is_dir():
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
-    <div id="output"></div>
-  </div>
+@app.get("/", include_in_schema=False)
+def serve_index():
+    return FileResponse(str(INDEX_PATH))
 
-<!-- Azure Speech SDK (browser) -->
-<script src="https://aka.ms/csspeech/jsbrowserpackageraw"></script>
+@app.get("/health", include_in_schema=False)
+def health():
+    return {"status": "ok"}
 
-<button id="startBtn">🎙️ Start Microphone</button>
-<div id="status" style="margin-top:8px;color:#334155;"></div>
-<div id="output" class="container"></div>
+# Allow frontend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Change to your domain in production
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-<script>
-const statusEl = document.getElementById("status");
-const outputEl = document.getElementById("output");
-const startBtn = document.getElementById("startBtn");
+@app.websocket("/ws/translate")
+async def translate_ws(websocket: WebSocket):
+    await websocket.accept()
 
-const scheme = location.protocol === "https:" ? "wss" : "ws";
-const ws = new WebSocket(`${scheme}://${location.host}/ws`);
-ws.addEventListener("open", () => status("WS connected"));
-ws.addEventListener("error", () => status("WS error", true));
+    translation_config = speechsdk.translation.SpeechTranslationConfig(
+        subscription=speech_key,
+        region=speech_region
+    )
+    translation_config.speech_recognition_language = "en-US"
+    translation_config.add_target_language("ko")
 
-function status(msg, err=false){
-  statusEl.textContent = msg;
-  statusEl.style.color = err ? "#b91c1c" : "#334155";
-}
-function addPair(src, dst){
-  const pair = document.createElement("div");
-  pair.className = "pair";
-  const t1 = document.createElement("div");
-  t1.className = "transcript"; t1.textContent = src;
-  const t2 = document.createElement("div");
-  t2.className = "translation"; t2.textContent = dst;
-  pair.appendChild(t1); pair.appendChild(t2);
-  outputEl.appendChild(pair);
-  outputEl.scrollTop = outputEl.scrollHeight;
-}
-// Receive server broadcasts (what all viewers see)
-ws.onmessage = (ev) => {
-  try {
-    const { transcript, translation } = JSON.parse(ev.data);
-    addPair(transcript, translation);
-  } catch { /* ignore */ }
-};
+    # Create a push stream for audio
+    stream = speechsdk.audio.PushAudioInputStream()
+    audio_config = speechsdk.audio.AudioConfig(stream=stream)
+    recognizer = speechsdk.translation.TranslationRecognizer(
+        translation_config=translation_config,
+        audio_config=audio_config
+    )
 
-startBtn.addEventListener("click", async () => {
-  if (!window.isSecureContext) status("⚠️ Use HTTPS for mic access", true);
+    loop = asyncio.get_event_loop()
+    results_queue = asyncio.Queue()
 
-  // 1) Ask your backend for a short-lived token
-  const token = await fetch("/speech/token", { method: "POST" }).then(r => r.text());
-  if (!token) return status("Token error", true);
+    # Event handler for recognition results
+    def handle_result(evt: speechsdk.translation.TranslationRecognitionEventArgs):
+        if evt.result.reason == speechsdk.ResultReason.TranslatedSpeech:
+            payload = {
+                "transcript": evt.result.text,
+                "translation": evt.result.translations.get("ko", "")
+            }
+            asyncio.run_coroutine_threadsafe(results_queue.put(payload), loop)
 
-  // 2) Init SDK (set your source language here)
-  const region = "<YOUR_SPEECH_REGION>"; // e.g., "westus2" (same as SPEECH_REGION)
-  const speechConfig = SpeechSDK.SpeechConfig.fromAuthorizationToken(token, region);
-  speechConfig.speechRecognitionLanguage = "en-US"; // source language
+    recognizer.recognized.connect(handle_result)
 
-  // 3) Use default mic
-  const audioConfig = SpeechSDK.AudioConfig.fromDefaultMicrophoneInput();
-  const recognizer = new SpeechSDK.SpeechRecognizer(speechConfig, audioConfig);
+    # Start continuous recognition
+    recognizer.start_continuous_recognition_async()
 
-  // Refresh token before 10 min expiry
-  setInterval(async () => {
-    try {
-      const t = await fetch("/speech/token", { method: "POST" }).then(r => r.text());
-      recognizer.authorizationToken = t;
-    } catch {}
-  }, 9 * 60 * 1000);
+    try:
+        while True:
+            # Receive mic chunk from browser
+            msg = await websocket.receive_bytes()
+            stream.write(msg)
 
-  recognizer.recognizing = (_s, e) => { status("Listening… " + (e.result?.text || "")); };
-  recognizer.canceled = (_s, e) => status("Canceled: " + e.errorDetails, true);
-  recognizer.sessionStopped = () => status("Stopped");
+            # Check if there are translation results ready
+            while not results_queue.empty():
+                payload = await results_queue.get()
+                await websocket.send_json(payload)
 
-  // 4) On each final result, POST to the server for translation+broadcast
-  recognizer.recognized = async (_s, e) => {
-    const text = e.result?.text?.trim();
-    if (!text) return;
-    try {
-      await fetch("/publish", {
-        method: "POST",
-        headers: {"Content-Type":"application/json"},
-        body: JSON.stringify({ text, from: "en", to: "ko" }) // change target as needed
-      });
-    } catch {
-      status("Publish failed", true);
-    }
-  };
+    except Exception as e:
+        await websocket.send_text(f"[Error] {str(e)}")
+    finally:
+        recognizer.stop_continuous_recognition_async()
+        stream.close()
+        await websocket.close()
 
-  recognizer.startContinuousRecognitionAsync(
-    () => status("🎤 Mic active. Speak now."),
-    (err) => status("Start error: " + err, true)
-  );
-});
-</script>
-
-
-
-
-</body>
-</html>
+if __name__ == "__main__":
+    import os, uvicorn
+    port = int(os.getenv("PORT", "8000"))
+    uvicorn.run(app, host="0.0.0.0", port=port)
