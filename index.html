@@ -25,6 +25,28 @@
       color: #0ea5e9;
     }
 
+    .status {
+      padding: 10px;
+      margin: 10px 0;
+      border-radius: 5px;
+      font-weight: bold;
+    }
+
+    .status.connected {
+      background: #dcfce7;
+      color: #166534;
+    }
+
+    .status.error {
+      background: #fecaca;
+      color: #991b1b;
+    }
+
+    .status.listening {
+      background: #dbeafe;
+      color: #1e40af;
+    }
+
     #output {
       margin-top: 30px;
       background: #e2e8f0;
@@ -36,7 +58,7 @@
     }
 
     .pair {
-      margin-bottom: 20px; /* space between transcript+translation blocks */
+      margin-bottom: 20px;
       padding-bottom: 10px;
       border-bottom: 1px solid #cbd5e1;
     }
@@ -50,105 +72,106 @@
     .translation {
       color: #334155;
     }
+
+    .recognizing {
+      opacity: 0.7;
+      font-style: italic;
+    }
   </style>
 </head>
 <body>
   <div class="wrapper">
     <h1>Worship On Air - AI Translation</h1>
     <p><em>English → Korean</em></p>
-
+    
+    <div id="status" class="status">Connecting...</div>
+    
     <div id="output"></div>
   </div>
 
 <script>
-  // Build WebSocket URL dynamically
   const scheme = location.protocol === "https:" ? "wss" : "ws";
   const wsUrl = `${scheme}://${location.host}/ws/translate`;
   const ws = new WebSocket(wsUrl);
-
+  
   const output = document.getElementById("output");
+  const status = document.getElementById("status");
+  
+  let currentRecognizingElement = null;
 
-  // --- Receive messages from server ---
+  ws.onopen = () => {
+    status.textContent = "Connected - Waiting for speech...";
+    status.className = "status connected";
+  };
+
   ws.onmessage = (event) => {
     try {
       const data = JSON.parse(event.data);
-
-      if (data.transcript && data.translation) {
-        const pair = document.createElement("div");
-        pair.className = "pair";
-
-        const transcript = document.createElement("div");
-        transcript.className = "transcript";
-        transcript.textContent = data.transcript;
-
-        const translation = document.createElement("div");
-        translation.className = "translation";
-        translation.textContent = data.translation;
-
-        pair.appendChild(transcript);
-        pair.appendChild(translation);
-
-        output.appendChild(pair);
-        output.scrollTop = output.scrollHeight; // auto-scroll
-      } else {
-        console.log("Message:", data);
+      console.log("Received:", data);
+      
+      switch(data.type) {
+        case "status":
+          status.textContent = data.message;
+          status.className = "status listening";
+          break;
+          
+        case "recognizing":
+          // Show intermediate results
+          if (data.transcript) {
+            if (!currentRecognizingElement) {
+              currentRecognizingElement = document.createElement("div");
+              currentRecognizingElement.className = "pair recognizing";
+              output.appendChild(currentRecognizingElement);
+            }
+            
+            currentRecognizingElement.innerHTML = `
+              <div class="transcript">${data.transcript}</div>
+              <div class="translation">${data.translation}</div>
+            `;
+            output.scrollTop = output.scrollHeight;
+          }
+          break;
+          
+        case "recognized":
+          // Show final results
+          if (currentRecognizingElement) {
+            currentRecognizingElement.remove();
+            currentRecognizingElement = null;
+          }
+          
+          if (data.transcript) {
+            const pair = document.createElement("div");
+            pair.className = "pair";
+            pair.innerHTML = `
+              <div class="transcript">${data.transcript}</div>
+              <div class="translation">${data.translation}</div>
+            `;
+            output.appendChild(pair);
+            output.scrollTop = output.scrollHeight;
+          }
+          break;
+          
+        case "error":
+          status.textContent = `Error: ${data.message}`;
+          status.className = "status error";
+          console.error("Error:", data.message);
+          break;
       }
     } catch (e) {
       console.warn("Non-JSON message:", event.data);
     }
   };
 
-  ws.onerror = () => {
-    const errorLine = document.createElement("div");
-    errorLine.textContent = "[WebSocket Error]";
-    errorLine.style.color = "red";
-    output.appendChild(errorLine);
+  ws.onerror = (error) => {
+    console.error("WebSocket error:", error);
+    status.textContent = "Connection error";
+    status.className = "status error";
   };
 
-  // --- Capture mic and send audio to server ---
-  ws.onopen = () => {
-    navigator.mediaDevices.getUserMedia({ audio: true })
-      .then(stream => {
-        console.log("Mic access granted ✅");
-        const micStatus = document.createElement("div");
-        micStatus.textContent = "[Mic Ready - streaming...]";
-        micStatus.style.color = "green";
-        output.appendChild(micStatus);
-
-        // Pick supported mimeType
-        let options = {};
-        if (MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) {
-          options.mimeType = "audio/webm;codecs=opus";
-        } else if (MediaRecorder.isTypeSupported("audio/webm")) {
-          options.mimeType = "audio/webm";
-        } else {
-          // fallback for Safari
-          options = {};
-        }
-
-        const mediaRecorder = new MediaRecorder(stream, options);
-
-        mediaRecorder.ondataavailable = (event) => {
-          if (event.data.size > 0 && ws.readyState === WebSocket.OPEN) {
-            event.data.arrayBuffer().then(buf => {
-              ws.send(buf); // send audio chunk
-            });
-          }
-        };
-
-        mediaRecorder.start(250); // send every 250ms
-      })
-      .catch(err => {
-        console.error("Mic error:", err);
-        const micError = document.createElement("div");
-        micError.textContent = "[Mic Error] " + err.message;
-        micError.style.color = "red";
-        output.appendChild(micError);
-      });
+  ws.onclose = () => {
+    status.textContent = "Connection closed";
+    status.className = "status error";
   };
 </script>
-
-
-
 </body>
 </html>
