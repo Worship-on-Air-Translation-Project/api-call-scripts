@@ -84,7 +84,7 @@ function addPair(src, dst){
 
 // 1) Everyone subscribes to the shared stream
 const scheme = location.protocol === "https:" ? "wss" : "ws";
-const ws = new WebSocket(`${scheme}://${location.host}/ws`);
+const ws = new WebSocket(`${scheme}://${location.host}/ws/translate`);
 ws.onopen  = () => setStatus("WS connected");
 ws.onerror = () => setStatus("WS error", true);
 ws.onmessage = (ev) => {
