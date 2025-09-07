@@ -52,40 +52,49 @@ async def translate_ws(websocket: WebSocket):
     )
     translation_config.speech_recognition_language = "en-US"
     translation_config.add_target_language("ko")
-    audio_config = speechsdk.audio.AudioConfig(use_default_microphone=True)
-    translator = speechsdk.translation.TranslationRecognizer(
+
+    # Create a push stream for audio
+    stream = speechsdk.audio.PushAudioInputStream()
+    audio_config = speechsdk.audio.AudioConfig(stream=stream)
+    recognizer = speechsdk.translation.TranslationRecognizer(
         translation_config=translation_config,
         audio_config=audio_config
     )
 
-    await websocket.send_text("Listening...")
+    loop = asyncio.get_event_loop()
+    results_queue = asyncio.Queue()
+
+    # Event handler for recognition results
+    def handle_result(evt: speechsdk.translation.TranslationRecognitionEventArgs):
+        if evt.result.reason == speechsdk.ResultReason.TranslatedSpeech:
+            payload = {
+                "transcript": evt.result.text,
+                "translation": evt.result.translations.get("ko", "")
+            }
+            asyncio.run_coroutine_threadsafe(results_queue.put(payload), loop)
+
+    recognizer.recognized.connect(handle_result)
+
+    # Start continuous recognition
+    recognizer.start_continuous_recognition_async()
 
     try:
         while True:
-            result = translator.recognize_once()
+            # Receive mic chunk from browser
+            msg = await websocket.receive_bytes()
+            stream.write(msg)
 
-            if result.reason == speechsdk.ResultReason.TranslatedSpeech:
-                original_text = result.text  # English transcript
-                translated_text = result.translations['ko']  # Korean translation
-
-                # Send both back in JSON format so frontend can separate them
-                payload = {
-                    "transcript": original_text,
-                    "translation": translated_text
-                }
+            # Check if there are translation results ready
+            while not results_queue.empty():
+                payload = await results_queue.get()
                 await websocket.send_json(payload)
-
-            elif result.reason == speechsdk.ResultReason.NoMatch:
-                await websocket.send_text("[No speech detected]")
-
-            elif result.reason == speechsdk.ResultReason.Canceled:
-                await websocket.send_text("[Canceled]")
-                break
-
-            await asyncio.sleep(0.5)
 
     except Exception as e:
         await websocket.send_text(f"[Error] {str(e)}")
+    finally:
+        recognizer.stop_continuous_recognition_async()
+        stream.close()
+        await websocket.close()
 
 if __name__ == "__main__":
     import os, uvicorn
