@@ -61,43 +61,50 @@
   </div>
 
 <script>
-const ws = new WebSocket("wss://YOUR_AZURE_APP_NAME.azurewebsites.net/ws/translate");
+  // Build WebSocket URL dynamically
+  const scheme = location.protocol === "https:" ? "wss" : "ws";
+  const wsUrl = `${scheme}://${location.host}/ws/translate`;
+  const ws = new WebSocket(wsUrl);
 
-ws.onopen = async () => {
-  console.log("Connected to server.");
+  const output = document.getElementById("output");
 
-  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-  const audioContext = new AudioContext();
-  const source = audioContext.createMediaStreamSource(stream);
-  const processor = audioContext.createScriptProcessor(4096, 1, 1);
+  ws.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data);
 
-  source.connect(processor);
-  processor.connect(audioContext.destination);
+      if (data.transcript && data.translation) {
+        const pair = document.createElement("div");
+        pair.className = "pair";
 
-  processor.onaudioprocess = (e) => {
-    const input = e.inputBuffer.getChannelData(0);
-    // Convert Float32 to PCM16
-    const buffer = new ArrayBuffer(input.length * 2);
-    const view = new DataView(buffer);
-    let offset = 0;
-    for (let i = 0; i < input.length; i++, offset += 2) {
-      let s = Math.max(-1, Math.min(1, input[i]));
-      view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+        const transcript = document.createElement("div");
+        transcript.className = "transcript";
+        transcript.textContent = data.transcript;
+
+        const translation = document.createElement("div");
+        translation.className = "translation";
+        translation.textContent = data.translation;
+
+        pair.appendChild(transcript);
+        pair.appendChild(translation);
+
+        output.appendChild(pair);
+
+        // Auto-scroll
+        output.scrollTop = output.scrollHeight;
+      } else {
+        console.log("Message:", data);
+      }
+    } catch (e) {
+      console.warn("Non-JSON message:", event.data);
     }
-    // Send base64 to server
-    ws.send(JSON.stringify({ audio_base64: Array.from(new Uint8Array(buffer)).map(b => b.toString(16)).join('') }));
   };
-};
 
-ws.onmessage = (e) => {
-  try {
-    const data = JSON.parse(e.data);
-    if (data.transcript && data.translation) {
-      console.log("Transcript:", data.transcript);
-      console.log("Translation:", data.translation);
-    }
-  } catch {}
-};
+  ws.onerror = () => {
+    const errorLine = document.createElement("div");
+    errorLine.textContent = "[WebSocket Error]";
+    errorLine.style.color = "red";
+    output.appendChild(errorLine);
+  };
 </script>
 
 </body>
