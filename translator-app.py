@@ -3,7 +3,6 @@ import os
 import asyncio
 from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
 from dotenv import load_dotenv
 import uvicorn
 
@@ -23,12 +22,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Serve index.html directly
-@app.get("/")
-async def get_index():
-    return FileResponse(os.path.join(os.path.dirname(__file__), "index.html"))
-
-# WebSocket route
 @app.websocket("/ws/translate")
 async def translate_ws(websocket: WebSocket):
     await websocket.accept()
