@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Live Translation — Viewer</title>
+  <style>
+    body { margin:0; padding:0; background:#f9f9f9; font-family:sans-serif; height:100vh; display:flex; align-items:center; justify-content:center; }
+    .wrapper { text-align:center; width:90%; max-width:800px; }
+    h1 { color:#e9710e; }
+    #output { margin-top:20px; background:#e2e8f0; padding:16px; border-radius:10px; height:420px; overflow-y:auto; text-align:left; }
+    .pair { margin-bottom:16px; padding-bottom:10px; border-bottom:1px solid #cbd5e1; }
+    .transcript { font-weight:bold; color:#111827; margin-bottom:6px; }
+    .translation { color:#334155; }
+    .hint { margin-top:8px; color:#334155; }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <h1>Worship On Air — AI Translation</h1>
+    <p><em>English → Korean</em></p>
+    <div id="output"></div>
+    <div class="hint">This page is read-only. The host device publishes to the stream.</div>
+  </div>
+
+<script>
+const outputEl = document.getElementById("output");
+function addPair(src, dst){
+  const wrap = document.createElement("div");
+  wrap.className = "pair";
+  const t1 = document.createElement("div"); t1.className = "transcript";  t1.textContent = src || "";
+  const t2 = document.createElement("div"); t2.className = "translation"; t2.textContent = dst || "";
+  wrap.appendChild(t1); wrap.appendChild(t2);
+  outputEl.appendChild(wrap);
+  outputEl.scrollTop = outputEl.scrollHeight;
+}
+
+// Subscribe via SSE
+const ev = new EventSource("/stream");
+ev.addEventListener("hello", () => { /* connected */ });
+ev.onmessage = (e) => {
+  try {
+    const { transcript, translation } = JSON.parse(e.data);
+    if (transcript || translation) addPair(transcript, translation);
+  } catch {}
+};
+ev.onerror = () => { /* optional: show reconnect UI */ };
+</script>
+</body>
+</html>

@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Live Translation — Host (Mic)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root { --bg:#0b1220; --card:#0f172a; --muted:#9ca3af; --line:#1f2937; --fg:#e5e7eb; --accent:#f59e0b; }
+  body { margin:0; background:var(--bg); color:var(--fg); font-family:sans-serif; min-height:100vh; display:flex; align-items:center; justify-content:center; }
+  .card { width:92%; max-width:900px; background:var(--card); border:1px solid var(--line); border-radius:14px; padding:20px; box-shadow:0 10px 30px rgba(0,0,0,.25); }
+  h1 { margin:0 0 12px; color:var(--accent); font-size:22px; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:10px; }
+  input, select, button {
+    background:#111827; color:var(--fg); border:1px solid #374151; border-radius:10px; padding:10px 12px; height:42px;
+  }
+  input[type="password"], input[type="text"] { width:260px; }
+  select { width:160px; }
+  button { cursor:pointer; }
+  .pill { font-size:12px; padding:6px 10px; border-radius:999px; border:1px solid #374151; display:flex; align-items:center; gap:6px; }
+  .muted { color:var(--muted); font-size:12px; }
+  #log { margin-top:12px; background:#0b1022; border:1px solid #1f2236; border-radius:12px; padding:12px; height:220px; overflow:auto; font-size:13px; line-height:1.3; }
+  .ok { color:#86efac; } .err { color:#fca5a5; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>Host Console (Microphone → Translate → Broadcast)</h1>
+
+  <div class="row">
+    <input id="token" type="password" placeholder="Publish token (HOST_PUBLISH_TOKEN)" />
+    <label class="pill"><input id="remember" type="checkbox" /> remember token</label>
+    <a class="pill" href="/" target="_blank">open viewer ↗</a>
+  </div>
+
+  <div class="row">
+    <label class="pill">Source&nbsp;
+      <select id="src">
+        <option value="en-US" selected>en-US</option>
+        <option value="en-GB">en-GB</option>
+        <option value="ko-KR">ko-KR</option>
+        <option value="ja-JP">ja-JP</option>
+        <option value="zh-CN">zh-CN</option>
+        <option value="es-ES">es-ES</option>
+        <option value="fr-FR">fr-FR</option>
+        <option value="de-DE">de-DE</option>
+      </select>
+    </label>
+    <label class="pill">Target&nbsp;
+      <select id="dst">
+        <option value="ko" selected>ko</option>
+        <option value="en">en</option>
+        <option value="ja">ja</option>
+        <option value="zh-Hans">zh-Hans</option>
+        <option value="es">es</option>
+        <option value="fr">fr</option>
+        <option value="de">de</option>
+      </select>
+    </label>
+    <label class="pill"><input id="sendInterim" type="checkbox" /> send interim (recognizing)</label>
+  </div>
+
+  <div class="row">
+    <button id="start">🎙️ Start</button>
+    <button id="stop" disabled>■ Stop</button>
+    <span id="status" class="muted"></span>
+  </div>
+
+  <div id="log"></div>
+  <p class="muted">Note: mic capture requires HTTPS on the public site (localhost is OK). Keep your token secret.</p>
+</div>
+
+<!-- Azure Speech SDK (browser) -->
+<script src="https://aka.ms/csspeech/jsbrowserpackageraw"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+const tokenEl=$("token"), rememberEl=$("remember"), srcEl=$("src"), dstEl=$("dst");
+const sendInterimEl=$("sendInterim"), startEl=$("start"), stopEl=$("stop"), statusEl=$("status"), logEl=$("log");
+
+(function restore(){
+  const t = localStorage.getItem("HOST_PUBLISH_TOKEN"); if (t){ tokenEl.value=t; rememberEl.checked=true; }
+  const a = localStorage.getItem("SRC_LANG"); if (a) srcEl.value=a;
+  const b = localStorage.getItem("DST_LANG"); if (b) dstEl.value=b;
+})();
+rememberEl.addEventListener("change", () => {
+  if (rememberEl.checked) localStorage.setItem("HOST_PUBLISH_TOKEN", tokenEl.value.trim());
+  else localStorage.removeItem("HOST_PUBLISH_TOKEN");
+});
+tokenEl.addEventListener("input", () => { if (rememberEl.checked) localStorage.setItem("HOST_PUBLISH_TOKEN", tokenEl.value.trim()); });
+srcEl.addEventListener("change", () => localStorage.setItem("SRC_LANG", srcEl.value));
+dstEl.addEventListener("change", () => localStorage.setItem("DST_LANG", dstEl.value));
+
+function log(msg, cls=""){ const p=document.createElement("div"); p.textContent=msg; if(cls) p.className=cls; logEl.appendChild(p); logEl.scrollTop=logEl.scrollHeight; }
+function setStatus(msg, err=false){ statusEl.textContent=msg; statusEl.style.color = err ? "#fca5a5" : "#9ca3af"; }
+
+let recognizer = null, tokenRefreshTimer = null;
+
+async function getSpeechRegion(){ const r=await fetch("/speech/config"); if(!r.ok) throw new Error("speech/config"); return (await r.json()).region; }
+async function getSpeechToken(){ const r=await fetch("/speech/token", {method:"POST"}); if(!r.ok) throw new Error("speech/token"); return await r.text(); }
+
+async function publish(text, isInterim=false){
+  const token = tokenEl.value.trim();
+  if (!token) { setStatus("Enter publish token.", true); return; }
+  const body = { text, from: srcEl.value.split("-")[0], to: dstEl.value }; // e.g., en-US -> en
+  if (isInterim && !sendInterimEl.checked) return;
+
+  try{
+    const r = await fetch("/publish", {
+      method:"POST",
+      headers:{ "Content-Type":"application/json", "Authorization":"Bearer "+token },
+      body: JSON.stringify(body)
+    });
+    if (!r.ok){ log(`Publish failed (${r.status})`, "err"); }
+  }catch(e){ log("Publish network error: "+e.message, "err"); }
+}
+
+startEl.addEventListener("click", async () => {
+  try{
+    // mic permission (required user gesture)
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation:true, noiseSuppression:true, autoGainControl:false }});
+    stream.getTracks().forEach(t => t.stop());
+
+    const region = await getSpeechRegion();
+    let sdkToken = await getSpeechToken();
+
+    const speechConfig = SpeechSDK.SpeechConfig.fromAuthorizationToken(sdkToken, region);
+    speechConfig.speechRecognitionLanguage = srcEl.value;
+    const audioConfig = SpeechSDK.AudioConfig.fromDefaultMicrophoneInput();
+    recognizer = new SpeechSDK.SpeechRecognizer(speechConfig, audioConfig);
+
+    // refresh SDK token every ~9 minutes
+    tokenRefreshTimer = setInterval(async () => {
+      try { recognizer.authorizationToken = await getSpeechToken(); } catch {}
+    }, 9*60*1000);
+
+    recognizer.recognizing = (_s, e) => {
+      const t = e.result?.text?.trim() || "";
+      if (t) { setStatus("Listening… " + t.slice(0,60)); publish(t, true); }
+    };
+    recognizer.recognized = (_s, e) => {
+      const t = e.result?.text?.trim() || "";
+      if (t){ log("FINAL: " + t, "ok"); publish(t, false); }
+    };
+    recognizer.canceled = (_s, e) => { log("Canceled: "+e.errorDetails, "err"); setStatus("Canceled", true); };
+    recognizer.sessionStarted = () => setStatus("🎤 Mic active. Publishing as host…");
+    recognizer.sessionStopped = () => setStatus("Stopped");
+
+    recognizer.startContinuousRecognitionAsync(
+      () => { startEl.disabled=true; stopEl.disabled=false; },
+      (err) => { log("Start error: "+err, "err"); setStatus("Start failed", true); }
+    );
+  }catch(e){
+    log("Mic/SDK error: " + e.message, "err"); setStatus("Error", true);
+  }
+});
+
+stopEl.addEventListener("click", () => {
+  try{
+    if (recognizer){
+      recognizer.stopContinuousRecognitionAsync(() => {
+        recognizer.close(); recognizer=null;
+        startEl.disabled=false; stopEl.disabled=true; setStatus("Stopped");
+      });
+    }
+  }finally{
+    if (tokenRefreshTimer) { clearInterval(tokenRefreshTimer); tokenRefreshTimer=null; }
+  }
+});
+</script>
+</body>
+</html>
