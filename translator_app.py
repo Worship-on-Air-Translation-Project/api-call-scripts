@@ -15,12 +15,19 @@ load_dotenv()
 BASE_DIR = Path(__file__).resolve().parent
 INDEX_PATH = BASE_DIR / "index.html"
 
-TRANSLATOR_ENDPOINT = os.getenv(
-    "AZURE_TRANSLATOR_ENDPOINT",
-    "https://api.cognitive.microsofttranslator.com",
+def getenv_any(*names: str, default: str = "") -> str:
+    for n in names:
+        v = os.getenv(n)
+        if v:
+            return v
+    return default
+
+TRANSLATOR_ENDPOINT = getenv_any(
+    "AZURE_TRANSLATOR_ENDPOINT", "TRANSLATOR_ENDPOINT",
+    default="https://api.cognitive.microsofttranslator.com",
 )
-TRANSLATOR_KEY = os.getenv("AZURE_TRANSLATOR_KEY", "")
-TRANSLATOR_REGION = os.getenv("AZURE_TRANSLATOR_REGION", "")
+TRANSLATOR_KEY   = getenv_any("AZURE_TRANSLATOR_KEY", "TRANSLATOR_KEY", default="")
+TRANSLATOR_REGION = getenv_any("AZURE_TRANSLATOR_REGION", "TRANSLATOR_REGION", default="")
 
 app = FastAPI()
 
