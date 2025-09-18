@@ -117,20 +117,18 @@ async def websocket_endpoint(websocket: WebSocket):
             data = await websocket.receive_text()
             # Broadcast to all *other* clients
             dead: Set[WebSocket] = set()
-            for client in clients:
+            for client in list(clients):
                 if client is websocket:
                     continue
                 try:
                     await client.send_text(data)
                 except Exception:
-                    # Mark broken sockets to remove (e.g., network drop)
                     dead.add(client)
             for d in dead:
                 clients.discard(d)
     except WebSocketDisconnect:
         clients.discard(websocket)
     except Exception:
-        # In case of unexpected error, drop this socket and continue.
         clients.discard(websocket)
 
 
