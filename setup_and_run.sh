@@ -28,7 +28,7 @@ if lsof -ti:8000 >/dev/null; then
 fi
 
 echo "Starting server"
-python3 translator_app.py &
+uvicorn translator_app:app --reload &
 
 SERVER_PID=$!
 
@@ -36,7 +36,7 @@ SERVER_PID=$!
 sleep 3
 
 echo "Opening website"
-open index.html
+open https://worshiponair-hxesamhxe5b0ebfn.canadacentral-01.azurewebsites.net
 
 # Kill server when script exits
 trap "echo 'Stopping server...'; kill -9 $SERVER_PID" EXIT
