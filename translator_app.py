@@ -25,10 +25,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Serve static files (if needed)
-app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
-
-
 @app.get("/")
 async def get_index():
     return FileResponse(INDEX_PATH)
