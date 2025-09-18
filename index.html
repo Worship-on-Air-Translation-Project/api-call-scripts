@@ -3,12 +3,18 @@
 <head>
   <meta charset="UTF-8" />
   <title>Worship On Air - AI Translation</title>
+
+  <!-- Google Fonts: Montserrat -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap" rel="stylesheet">
+
   <style>
     body {
       margin: 0;
       padding: 0;
-      background: #f9f9f9;
-      font-family: sans-serif;
+      background: #ffffff;
+      font-family: "Montserrat", Arial, sans-serif;
       height: 100vh;
       display: flex;
       align-items: center;
@@ -21,8 +27,17 @@
       max-width: 800px;
     }
 
+    .logo {
+      max-width: 120px; /* adjust size */
+      margin-bottom: 15px;
+    }
+
     h1 {
-      color: #0ea5e9;
+      color: #db6355;
+      font-family: "Montserrat", Arial, sans-serif;
+      font-weight: 300;
+      letter-spacing: 0.05em;
+      margin-top: 0;
     }
 
     .status {
@@ -86,6 +101,10 @@
 </head>
 <body>
   <div class="wrapper">
+    <!-- Logo -->
+    <img src="worshiponairlogo.png" alt="Worship On Air Logo" class="logo" />
+
+    <!-- Title -->
     <h1>Worship On Air - AI Translation</h1>
 
     <!-- Role selection -->
@@ -153,7 +172,6 @@
     ws.onmessage = (event) => {
       const data = JSON.parse(event.data);
       if (!isAdmin) {
-        // Clients display received translations
         displayTranslation(data.transcript, data.translation);
       }
     };
@@ -181,7 +199,6 @@
 
     const status = document.getElementById('status');
     const output = document.getElementById('output');
-    let interimElement = null;
 
     recognition.onstart = () => {
       status.textContent = 'Listening...';
@@ -206,10 +223,8 @@
         try {
           const translation = await translateText(finalTranscript.trim());
 
-          // Show locally for admin
           displayTranslation(finalTranscript.trim(), translation);
 
-          // Send to clients
           if (ws && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({
               transcript: finalTranscript.trim(),
