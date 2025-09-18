@@ -15,28 +15,15 @@ load_dotenv()
 BASE_DIR = Path(__file__).resolve().parent
 INDEX_PATH = BASE_DIR / "index.html"
 
-def getenv_any(*names: str, default: str = "") -> str:
-    """Return the first non-empty env var among names."""
-    for n in names:
-        v = os.getenv(n)
-        if v:
-            return v
-    return default
-
-# Accept both naming schemes to avoid config mismatches
-TRANSLATOR_ENDPOINT = getenv_any(
-    "AZURE_TRANSLATOR_ENDPOINT", "TRANSLATOR_ENDPOINT",
-    default="https://api.cognitive.microsofttranslator.com",
-)
-TRANSLATOR_KEY = getenv_any("AZURE_TRANSLATOR_KEY", "TRANSLATOR_KEY", default="")
-TRANSLATOR_REGION = getenv_any("AZURE_TRANSLATOR_REGION", "TRANSLATOR_REGION", default="")
+TRANSLATOR_ENDPOINT = os.getenv("AZURE_TRANSLATOR_ENDPOINT", "https://api.cognitive.microsofttranslator.com")
+TRANSLATOR_KEY = os.getenv("AZURE_TRANSLATOR_KEY", "")
+TRANSLATOR_REGION = os.getenv("AZURE_TRANSLATOR_REGION", "")
 
 app = FastAPI()
 
-# CORS (keep permissive for now; tighten if you add a custom domain)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # set to your domain(s) in production
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -44,12 +31,13 @@ app.add_middleware(
 
 # ------------ Helpers ------------
 def translate_sync(text: str, from_lang: str, to_lang: str) -> str:
-    if not text.strip():
+    text = (text or "").strip()
+    if not text:
         return ""
 
     if not TRANSLATOR_KEY or not TRANSLATOR_REGION:
         return ("Error: Translator service not configured. "
-                "Set AZURE_TRANSLATOR_KEY/REGION or TRANSLATOR_KEY/REGION.")
+                "Set AZURE_TRANSLATOR_KEY and AZURE_TRANSLATOR_REGION.")
 
     url = f"{TRANSLATOR_ENDPOINT.rstrip('/')}/translate"
     params = {"api-version": "3.0", "from": from_lang, "to": to_lang}
@@ -59,8 +47,9 @@ def translate_sync(text: str, from_lang: str, to_lang: str) -> str:
         "Content-Type": "application/json",
     }
     payload = [{"text": text}]
+
     try:
-        resp = requests.post(url, params=params, headers=headers, json=payload, timeout=15)
+        resp = requests.post(url, params=params, headers=headers, json=payload, timeout=10)
         if resp.status_code != 200:
             return f"Translation failed ({resp.status_code})"
         data = resp.json()
@@ -79,7 +68,6 @@ def translate_sync(text: str, from_lang: str, to_lang: str) -> str:
 # ------------ Routes ------------
 @app.get("/")
 async def get_index():
-    """Serve the SPA index with no-cache headers to avoid stale pages."""
     if not INDEX_PATH.exists():
         return JSONResponse(
             {"error": "index.html not found at application root."},
@@ -107,10 +95,7 @@ async def healthz():
 @app.post("/api/translate")
 async def translate_text(req: Request):
     """
-    Accept JSON, form-encoded, or raw text bodies:
-    - { "text": "...", "from": "en", "to": "ko" }
-    - text=...&from=en&to=ko
-    - plain text body (text only)
+    Accept JSON, form-encoded, or raw text.
     """
     text = ""
     from_lang = "en"
@@ -129,18 +114,21 @@ async def translate_text(req: Request):
             from_lang = first.get("from", from_lang)
             to_lang = first.get("to", to_lang)
     except Exception:
-        # Not JSON – try form
+        # Try form
         try:
             form = await req.form()
             text = (form.get("text") or "").strip()
             from_lang = form.get("from", from_lang)
             to_lang = form.get("to", to_lang)
         except Exception:
-            # Not form – use raw text
+            # Fallback: raw body
             raw = await req.body()
             text = raw.decode("utf-8", errors="ignore").strip()
 
-    translated = await run_in_threadpool(translate_sync, text or "", from_lang, to_lang)
+    if not text:
+        return {"translation": ""}
+
+    translated = await run_in_threadpool(translate_sync, text, from_lang, to_lang)
     return {"translation": translated}
 
 # ---- WebSocket Broadcasting ----
@@ -152,23 +140,49 @@ async def websocket_endpoint(websocket: WebSocket):
     clients.add(websocket)
     try:
         while True:
-            data = await websocket.receive_text()
+            # Accept both text and binary frames; normalize to str
+            msg = await websocket.receive()
+            if msg.get("type") == "websocket.disconnect":
+                break
+
+            data_text: Optional[str] = None
+            if "text" in msg and msg["text"] is not None:
+                data_text = msg["text"]
+            elif "bytes" in msg and msg["bytes"] is not None:
+                # Some clients/drivers can send binary; decode as UTF-8 if possible
+                try:
+                    data_text = msg["bytes"].decode("utf-8", errors="ignore")
+                except Exception:
+                    data_text = None
+
+            if not data_text:
+                continue  # ignore non-text messages
+
+            # Only forward JSON-looking payloads (what your UI sends)
+            if not data_text.lstrip().startswith("{"):
+                continue
+
             dead: Set[WebSocket] = set()
-            for client in list(clients):
+            for client in tuple(clients):
                 if client is websocket:
                     continue
                 try:
-                    await client.send_text(data)
+                    await client.send_text(data_text)
                 except Exception:
                     dead.add(client)
             for d in dead:
+                try:
+                    await d.close()
+                except Exception:
+                    pass
                 clients.discard(d)
     except WebSocketDisconnect:
-        clients.discard(websocket)
-    except Exception:
+        pass
+    finally:
         clients.discard(websocket)
 
 # Optional: run locally
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("translator_app:app", host="0.0.0.0", port=8000, reload=True)
+    # Bind to 0.0.0.0 so phones on your LAN can reach it via your machine's IP
+    uvicorn.run("translator_app:app", host="0.0.0.0", port=int(os.getenv("PORT", "8000")), reload=True)
