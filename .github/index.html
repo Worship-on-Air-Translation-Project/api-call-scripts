@@ -148,7 +148,8 @@
   }
 
   function setupWebSocket() {
-    ws = new WebSocket("ws://" + window.location.host + "/ws");
+    const proto = (location.protocol === 'https:') ? 'wss' : 'ws';
+    ws = new WebSocket(`${proto}://${window.location.host}/ws`);
     ws.onmessage = (event) => {
       const data = JSON.parse(event.data);
       if (!isAdmin) {
