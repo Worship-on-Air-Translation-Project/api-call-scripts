@@ -1,9 +1,8 @@
 import os
-import asyncio
 from pathlib import Path
 from typing import Set
 
-import httpx
+import aiohttp
 from dotenv import load_dotenv
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -84,12 +83,11 @@ async def translate_text(request: dict):
     payload = [{"text": text}]
 
     try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.post(url, params=params, headers=headers, json=payload)
-        if resp.status_code != 200:
-            # Don’t crash; return a friendly message so the UI can show it.
-            return {"translation": f"Translation failed ({resp.status_code})"}
-        data = resp.json()
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as session:
+            async with session.post(url, params=params, headers=headers, json=payload) as resp:
+                if resp.status != 200:
+                    return {"translation": f"Translation failed ({resp.status})"}
+                data = await resp.json()
         translated = (
             data[0]["translations"][0]["text"]
             if data and isinstance(data, list)
