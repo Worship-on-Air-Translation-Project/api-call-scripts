@@ -1,81 +1,140 @@
 import os
 import asyncio
+from pathlib import Path
+from typing import Set
+
+import httpx
+from dotenv import load_dotenv
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
-from dotenv import load_dotenv
-from pathlib import Path
-from typing import List
-import azure.cognitiveservices.speech as speechsdk
+from fastapi.responses import FileResponse, JSONResponse
 
+# ------------ Setup ------------
 load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent
 INDEX_PATH = BASE_DIR / "index.html"
 
+TRANSLATOR_ENDPOINT = os.getenv(
+    "AZURE_TRANSLATOR_ENDPOINT",
+    "https://api.cognitive.microsofttranslator.com",
+)
+TRANSLATOR_KEY = os.getenv("AZURE_TRANSLATOR_KEY", "")
+TRANSLATOR_REGION = os.getenv("AZURE_TRANSLATOR_REGION", "")
+
 app = FastAPI()
 
-# Enable CORS
+# CORS (keep permissive for now; tighten if you add a custom domain)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # set to your domain(s) in production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# ------------ Routes ------------
 @app.get("/")
 async def get_index():
-    return FileResponse(INDEX_PATH)
+    """Serve the SPA index with no-cache headers to avoid stale pages."""
+    return FileResponse(
+        INDEX_PATH,
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        },
+    )
 
 
-# ---- Translation API ----
+@app.get("/healthz")
+async def healthz():
+    """Simple health check endpoint."""
+    return JSONResponse({"ok": True})
+
+
+# ---- Translation API (Text REST, no server mic) ----
 @app.post("/api/translate")
 async def translate_text(request: dict):
-    text = request.get("text", "")
-    from_lang = request.get("from", "en")
-    to_lang = request.get("to", "ko")
+    """
+    Translate plain text using Azure Translator Text REST API.
+    Expects: {"text": "...", "from": "en", "to": "ko"}
+    """
+    text = (request or {}).get("text", "") or ""
+    from_lang = (request or {}).get("from", "en")
+    to_lang = (request or {}).get("to", "ko")
 
-    # Azure Translator setup
-    speech_key = os.getenv("AZURE_SPEECH_KEY")
-    service_region = os.getenv("AZURE_SERVICE_REGION")
+    if not text.strip():
+        return {"translation": ""}
 
-    if not speech_key or not service_region:
-        return {"translation": "Error: Azure credentials not set."}
+    # Validate configuration; return friendly JSON (avoid 500s).
+    if not TRANSLATOR_KEY or not TRANSLATOR_REGION:
+        return {
+            "translation": "Error: Translator service not configured. "
+                           "Set AZURE_TRANSLATOR_KEY and AZURE_TRANSLATOR_REGION."
+        }
 
-    # Translator speech config
-    translation_config = speechsdk.translation.SpeechTranslationConfig(
-        subscription=speech_key, region=service_region
-    )
-    translation_config.speech_recognition_language = from_lang
-    translation_config.add_target_language(to_lang)
+    url = f"{TRANSLATOR_ENDPOINT.rstrip('/')}/translate"
+    params = {"api-version": "3.0", "from": from_lang, "to": to_lang}
+    headers = {
+        "Ocp-Apim-Subscription-Key": TRANSLATOR_KEY,
+        "Ocp-Apim-Subscription-Region": TRANSLATOR_REGION,
+        "Content-Type": "application/json",
+    }
+    payload = [{"text": text}]
 
-    # Use text translation
-    translator = speechsdk.translation.TranslationRecognizer(translation_config=translation_config)
-
-    result = translator.recognize_once_async().get()
-    if result.reason == speechsdk.ResultReason.TranslatedSpeech:
-        translations = result.translations
-        return {"translation": translations.get(to_lang, "Translation failed")}
-    else:
-        return {"translation": "Translation failed"}
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.post(url, params=params, headers=headers, json=payload)
+        if resp.status_code != 200:
+            # Don’t crash; return a friendly message so the UI can show it.
+            return {"translation": f"Translation failed ({resp.status_code})"}
+        data = resp.json()
+        translated = (
+            data[0]["translations"][0]["text"]
+            if data and isinstance(data, list)
+            and data[0].get("translations")
+            else ""
+        )
+        return {"translation": translated}
+    except Exception as e:
+        # Avoid 500s—surface a readable error string to the client.
+        return {"translation": f"Translation failed: {type(e).__name__}"}
 
 
 # ---- WebSocket Broadcasting ----
-clients: List[WebSocket] = []
+# Keep a set of all connected clients in this process.
+clients: Set[WebSocket] = set()
 
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
-    clients.append(websocket)
+    clients.add(websocket)
     try:
         while True:
+            # Admin sends JSON: {"transcript": "...", "translation": "..."}
             data = await websocket.receive_text()
-            # Broadcast to all clients (including other clients)
+            # Broadcast to all *other* clients
+            dead: Set[WebSocket] = set()
             for client in clients:
-                if client != websocket:
+                if client is websocket:
+                    continue
+                try:
                     await client.send_text(data)
+                except Exception:
+                    # Mark broken sockets to remove (e.g., network drop)
+                    dead.add(client)
+            for d in dead:
+                clients.discard(d)
     except WebSocketDisconnect:
-        clients.remove(websocket)
+        clients.discard(websocket)
+    except Exception:
+        # In case of unexpected error, drop this socket and continue.
+        clients.discard(websocket)
+
+
+# Optional: allow running locally with `python translator_app.py`
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("translator_app:app", host="0.0.0.0", port=8000, reload=True)
