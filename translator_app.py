@@ -1,82 +1,46 @@
 import os
-import uuid
-import logging
 from pathlib import Path
-from typing import Set, Optional, Dict, Any
+from typing import Set, Optional
 
 import requests
 from dotenv import load_dotenv
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request  # <-- added Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from starlette.concurrency import run_in_threadpool
 
-# ------------ Logging ------------
-logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
-log = logging.getLogger("translator_app")
-
 # ------------ Setup ------------
-# Load a local .env for local dev; on Azure, values come from App Settings.
-load_dotenv(override=True)
+load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent
 INDEX_PATH = BASE_DIR / "index.html"
 
-def getenv_any(*names: str, default: str = "") -> str:
-    """Return the first set environment variable among names."""
-    for n in names:
-        v = os.getenv(n)
-        if v:
-            return v
-    return default
-
-# Accept both naming schemes to avoid config mismatches
-TRANSLATOR_ENDPOINT = getenv_any(
-    "AZURE_TRANSLATOR_ENDPOINT", "TRANSLATOR_ENDPOINT",
-    default="https://api.cognitive.microsofttranslator.com",
+TRANSLATOR_ENDPOINT = os.getenv(
+    "AZURE_TRANSLATOR_ENDPOINT",
+    "https://api.cognitive.microsofttranslator.com",
 )
-TRANSLATOR_KEY = getenv_any("AZURE_TRANSLATOR_KEY", "TRANSLATOR_KEY", default="")
-TRANSLATOR_REGION = getenv_any("AZURE_TRANSLATOR_REGION", "TRANSLATOR_REGION", default="")
+TRANSLATOR_KEY = os.getenv("AZURE_TRANSLATOR_KEY", "")
+TRANSLATOR_REGION = os.getenv("AZURE_TRANSLATOR_REGION", "")
 
-app = FastAPI(title="Worship On Air - Translator")
+app = FastAPI()
 
-# CORS (wide-open for now; restrict in production)
+# CORS (keep permissive for now; tighten if you add a custom domain)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # set to your domain(s) in production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # ------------ Helpers ------------
-def config_status() -> Dict[str, Any]:
-    """For internal checks and the /debug/env endpoint."""
-    return {
-        "endpoint": TRANSLATOR_ENDPOINT,
-        "AZURE_TRANSLATOR_KEY_set": bool(os.getenv("AZURE_TRANSLATOR_KEY")),
-        "TRANSLATOR_KEY_set": bool(os.getenv("TRANSLATOR_KEY")),
-        "AZURE_TRANSLATOR_REGION_set": bool(os.getenv("AZURE_TRANSLATOR_REGION")),
-        "TRANSLATOR_REGION_set": bool(os.getenv("TRANSLATOR_REGION")),
-    }
-
 def translate_sync(text: str, from_lang: str, to_lang: str) -> str:
-    """
-    Blocking call to Azure Translator Text REST API using 'requests'.
-    Returns translated text OR a friendly error string. Never raises.
-    """
     if not text.strip():
         return ""
 
     if not TRANSLATOR_KEY or not TRANSLATOR_REGION:
-        missing = []
-        if not TRANSLATOR_KEY:
-            missing.append("key")
-        if not TRANSLATOR_REGION:
-            missing.append("region")
-        log.warning("Translator config missing: %s | %s", missing, config_status())
         return ("Error: Translator service not configured. "
-                "Set AZURE_TRANSLATOR_KEY/REGION or TRANSLATOR_KEY/REGION.")
+                "Set AZURE_TRANSLATOR_KEY and AZURE_TRANSLATOR_REGION.")
 
     url = f"{TRANSLATOR_ENDPOINT.rstrip('/')}/translate"
     params = {"api-version": "3.0", "from": from_lang, "to": to_lang}
@@ -84,14 +48,11 @@ def translate_sync(text: str, from_lang: str, to_lang: str) -> str:
         "Ocp-Apim-Subscription-Key": TRANSLATOR_KEY,
         "Ocp-Apim-Subscription-Region": TRANSLATOR_REGION,
         "Content-Type": "application/json",
-        "X-ClientTraceId": str(uuid.uuid4()),
     }
     payload = [{"text": text}]
-
     try:
-        resp = requests.post(url, params=params, headers=headers, json=payload, timeout=15)
+        resp = requests.post(url, params=params, headers=headers, json=payload, timeout=10)
         if resp.status_code != 200:
-            log.error("Translation failed: status=%s body=%s", resp.status_code, resp.text[:500])
             return f"Translation failed ({resp.status_code})"
         data = resp.json()
         translated: Optional[str] = (
@@ -104,13 +65,11 @@ def translate_sync(text: str, from_lang: str, to_lang: str) -> str:
         )
         return translated or ""
     except requests.RequestException as e:
-        log.exception("Network error calling Translator")
         return f"Translation failed: {type(e).__name__}"
 
 # ------------ Routes ------------
 @app.get("/")
 async def get_index():
-    """Serve the SPA index with no-cache headers to avoid stale pages."""
     if not INDEX_PATH.exists():
         return JSONResponse(
             {"error": "index.html not found at application root."},
@@ -134,27 +93,48 @@ async def get_index():
 async def healthz():
     return JSONResponse({"ok": True})
 
-@app.get("/debug/env")
-async def debug_env():
-    """Debug ONLY: verify which env vars are actually present (remove in prod)."""
-    return config_status()
-
-# ---- Translation API (Text REST, no server mic) ----
+# ---- Translation API (Text REST) ----
 @app.post("/api/translate")
-async def translate_text(request: dict):
+async def translate_text(req: Request):  # <-- changed signature
     """
-    Translate plain text using Azure Translator Text REST API.
-    Expects: {"text": "...", "from": "en", "to": "ko"}
+    Accept JSON, form-encoded, or raw text bodies:
+    - { "text": "...", "from": "en", "to": "ko" }
+    - text=...&from=en&to=ko
+    - plain text body (text only)
     """
-    text = (request or {}).get("text", "") or ""
-    from_lang = (request or {}).get("from", "en")
-    to_lang = (request or {}).get("to", "ko")
+    text = ""
+    from_lang = "en"
+    to_lang = "ko"
 
-    translated = await run_in_threadpool(translate_sync, text, from_lang, to_lang)
+    # Try JSON first
+    try:
+        body = await req.json()
+        if isinstance(body, dict):
+            text = (body.get("text") or "").strip()
+            from_lang = body.get("from", from_lang)
+            to_lang = body.get("to", to_lang)
+        elif isinstance(body, list) and body and isinstance(body[0], dict):
+            # tolerate [{ text, from, to }]
+            first = body[0]
+            text = (first.get("text") or "").strip()
+            from_lang = first.get("from", from_lang)
+            to_lang = first.get("to", to_lang)
+    except Exception:
+        # Not JSON – try form
+        try:
+            form = await req.form()
+            text = (form.get("text") or "").strip()
+            from_lang = form.get("from", from_lang)
+            to_lang = form.get("to", to_lang)
+        except Exception:
+            # Not form – use raw text
+            raw = await req.body()
+            text = raw.decode("utf-8", errors="ignore").strip()
+
+    translated = await run_in_threadpool(translate_sync, text or "", from_lang, to_lang)
     return {"translation": translated}
 
 # ---- WebSocket Broadcasting ----
-# Keep a set of all connected clients in this process.
 clients: Set[WebSocket] = set()
 
 @app.websocket("/ws")
@@ -163,9 +143,7 @@ async def websocket_endpoint(websocket: WebSocket):
     clients.add(websocket)
     try:
         while True:
-            # Admin sends JSON: {"transcript": "...", "translation": "..."}
             data = await websocket.receive_text()
-            # Broadcast to all *other* clients
             dead: Set[WebSocket] = set()
             for client in list(clients):
                 if client is websocket:
@@ -181,9 +159,7 @@ async def websocket_endpoint(websocket: WebSocket):
     except Exception:
         clients.discard(websocket)
 
-# Optional: allow running locally with `python translator_app.py`
+# Optional: run locally
 if __name__ == "__main__":
     import uvicorn
-    port = int(os.getenv("PORT", "8000"))
-    log.info("Starting dev server on 0.0.0.0:%s", port)
-    uvicorn.run("translator_app:app", host="0.0.0.0", port=port, reload=True)
+    uvicorn.run("translator_app:app", host="0.0.0.0", port=8000, reload=True)
