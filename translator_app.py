@@ -1,24 +1,22 @@
 import os
-import requests
-import uuid
-import logging
-from fastapi import FastAPI, HTTPException
+import asyncio
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 from pathlib import Path
+from typing import List
+import azure.cognitiveservices.speech as speechsdk
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-# Load environment variables
 load_dotenv()
 
-app = FastAPI(title="Azure Translation API")
+BASE_DIR = Path(__file__).resolve().parent
+INDEX_PATH = BASE_DIR / "index.html"
 
-# CORS middleware
+app = FastAPI()
+
+# Enable CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -27,128 +25,61 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Serve the HTML file
-BASE_DIR = Path(__file__).resolve().parent
-INDEX_PATH = BASE_DIR / "index.html"
+# Serve static files (if needed)
+app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
+
 
 @app.get("/")
-def serve_index():
-    return FileResponse(str(INDEX_PATH))
+async def get_index():
+    return FileResponse(INDEX_PATH)
 
-class TranslationRequest(BaseModel):
-    text: str
-    from_lang: str = "en"
-    to_lang: str = "ko"
 
-class TranslationResponse(BaseModel):
-    translation: str
-    original: str
+# ---- Translation API ----
+@app.post("/api/translate")
+async def translate_text(request: dict):
+    text = request.get("text", "")
+    from_lang = request.get("from", "en")
+    to_lang = request.get("to", "ko")
 
-@app.post("/api/translate", response_model=TranslationResponse)
-async def translate_text(request: TranslationRequest):
-    """
-    Translate text using Azure Translator API
-    """
-    logger.info(f"Translation request: {request.text[:50]}... from {request.from_lang} to {request.to_lang}")
-    
+    # Azure Translator setup
+    speech_key = os.getenv("AZURE_SPEECH_KEY")
+    service_region = os.getenv("AZURE_SERVICE_REGION")
+
+    if not speech_key or not service_region:
+        return {"translation": "Error: Azure credentials not set."}
+
+    # Translator speech config
+    translation_config = speechsdk.translation.SpeechTranslationConfig(
+        subscription=speech_key, region=service_region
+    )
+    translation_config.speech_recognition_language = from_lang
+    translation_config.add_target_language(to_lang)
+
+    # Use text translation
+    translator = speechsdk.translation.TranslationRecognizer(translation_config=translation_config)
+
+    result = translator.recognize_once_async().get()
+    if result.reason == speechsdk.ResultReason.TranslatedSpeech:
+        translations = result.translations
+        return {"translation": translations.get(to_lang, "Translation failed")}
+    else:
+        return {"translation": "Translation failed"}
+
+
+# ---- WebSocket Broadcasting ----
+clients: List[WebSocket] = []
+
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    clients.append(websocket)
     try:
-        # Validate environment variables
-        translator_key = os.getenv("TRANSLATOR_KEY")
-        translator_region = os.getenv("TRANSLATOR_REGION")
-        
-        if not translator_key:
-            logger.error("TRANSLATOR_KEY environment variable not set")
-            raise HTTPException(status_code=500, detail="Translator API key not configured")
-        
-        if not translator_region:
-            logger.error("TRANSLATOR_REGION environment variable not set")
-            raise HTTPException(status_code=500, detail="Translator region not configured")
-        
-        # Azure Translator endpoint
-        endpoint = "https://api.cognitive.microsofttranslator.com"
-        path = "/translate"
-        constructed_url = endpoint + path
-        
-        params = {
-            'api-version': '3.0',
-            'from': request.from_lang,
-            'to': request.to_lang
-        }
-        
-        headers = {
-            'Ocp-Apim-Subscription-Key': translator_key,
-            'Ocp-Apim-Subscription-Region': translator_region,
-            'Content-type': 'application/json',
-            'X-ClientTraceId': str(uuid.uuid4())
-        }
-        
-        body = [{
-            'text': request.text
-        }]
-        
-        logger.info(f"Making request to: {constructed_url}")
-        logger.info(f"Request params: {params}")
-        logger.info(f"Request body: {body}")
-        
-        # Make the translation request
-        response = requests.post(
-            constructed_url, 
-            params=params, 
-            headers=headers, 
-            json=body,
-            timeout=30  # Add timeout
-        )
-        
-        logger.info(f"Response status: {response.status_code}")
-        logger.info(f"Response headers: {dict(response.headers)}")
-        
-        if response.status_code != 200:
-            error_text = response.text
-            logger.error(f"Translation API error: {response.status_code} - {error_text}")
-            raise HTTPException(
-                status_code=response.status_code, 
-                detail=f"Translation API error: {error_text}"
-            )
-        
-        result = response.json()
-        logger.info(f"Translation result: {result}")
-        
-        if result and len(result) > 0 and 'translations' in result[0]:
-            translated_text = result[0]['translations'][0]['text']
-            logger.info(f"Translation successful: {translated_text}")
-            return TranslationResponse(
-                translation=translated_text,
-                original=request.text
-            )
-        else:
-            logger.error(f"Unexpected translation response format: {result}")
-            raise HTTPException(
-                status_code=500, 
-                detail=f"Unexpected translation response format: {result}"
-            )
-            
-    except requests.RequestException as e:
-        logger.error(f"Network error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Network error: {str(e)}")
-    except Exception as e:
-        logger.error(f"Translation error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Translation error: {str(e)}")
-
-@app.get("/health")
-def health_check():
-    return {"status": "healthy"}
-
-# Add environment variable check endpoint for debugging
-@app.get("/debug/env")
-def check_env():
-    """Debug endpoint to check environment variables (remove in production)"""
-    return {
-        "translator_key_set": bool(os.getenv("TRANSLATOR_KEY")),
-        "translator_region_set": bool(os.getenv("TRANSLATOR_REGION")),
-        "translator_region": os.getenv("TRANSLATOR_REGION")  # Safe to show region
-    }
-
-if __name__ == "__main__":
-    import uvicorn
-    port = int(os.getenv("PORT", "8000"))
-    uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")
+        while True:
+            data = await websocket.receive_text()
+            # Broadcast to all clients (including other clients)
+            for client in clients:
+                if client != websocket:
+                    await client.send_text(data)
+    except WebSocketDisconnect:
+        clients.remove(websocket)
