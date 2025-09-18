@@ -15,29 +15,39 @@ load_dotenv()
 BASE_DIR = Path(__file__).resolve().parent
 INDEX_PATH = BASE_DIR / "index.html"
 
-TRANSLATOR_ENDPOINT = os.getenv("AZURE_TRANSLATOR_ENDPOINT", "https://api.cognitive.microsofttranslator.com")
-TRANSLATOR_KEY = os.getenv("AZURE_TRANSLATOR_KEY", "")
-TRANSLATOR_REGION = os.getenv("AZURE_TRANSLATOR_REGION", "")
+def getenv_any(*names: str, default: str = "") -> str:
+    for n in names:
+        v = os.getenv(n)
+        if v:
+            return v
+    return default
+
+TRANSLATOR_ENDPOINT = getenv_any(
+    "AZURE_TRANSLATOR_ENDPOINT", "TRANSLATOR_ENDPOINT",
+    default="https://api.cognitive.microsofttranslator.com",
+)
+TRANSLATOR_KEY = getenv_any("AZURE_TRANSLATOR_KEY", "TRANSLATOR_KEY", default="")
+TRANSLATOR_REGION = getenv_any("AZURE_TRANSLATOR_REGION", "TRANSLATOR_REGION", default="")
 
 app = FastAPI()
 
+# ---- CORS: allow "*" but DO NOT allow credentials with it ----
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,  # <-- CHANGED
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # ------------ Helpers ------------
 def translate_sync(text: str, from_lang: str, to_lang: str) -> str:
-    text = (text or "").strip()
-    if not text:
+    if not (text or "").strip():
         return ""
 
     if not TRANSLATOR_KEY or not TRANSLATOR_REGION:
         return ("Error: Translator service not configured. "
-                "Set AZURE_TRANSLATOR_KEY and AZURE_TRANSLATOR_REGION.")
+                "Set AZURE_TRANSLATOR_KEY/REGION or TRANSLATOR_KEY/REGION.")
 
     url = f"{TRANSLATOR_ENDPOINT.rstrip('/')}/translate"
     params = {"api-version": "3.0", "from": from_lang, "to": to_lang}
@@ -49,7 +59,7 @@ def translate_sync(text: str, from_lang: str, to_lang: str) -> str:
     payload = [{"text": text}]
 
     try:
-        resp = requests.post(url, params=params, headers=headers, json=payload, timeout=10)
+        resp = requests.post(url, params=params, headers=headers, json=payload, timeout=15)
         if resp.status_code != 200:
             return f"Translation failed ({resp.status_code})"
         data = resp.json()
@@ -94,14 +104,10 @@ async def healthz():
 # ---- Translation API (Text REST) ----
 @app.post("/api/translate")
 async def translate_text(req: Request):
-    """
-    Accept JSON, form-encoded, or raw text.
-    """
     text = ""
     from_lang = "en"
     to_lang = "ko"
 
-    # Try JSON first
     try:
         body = await req.json()
         if isinstance(body, dict):
@@ -114,14 +120,12 @@ async def translate_text(req: Request):
             from_lang = first.get("from", from_lang)
             to_lang = first.get("to", to_lang)
     except Exception:
-        # Try form
         try:
             form = await req.form()
             text = (form.get("text") or "").strip()
             from_lang = form.get("from", from_lang)
             to_lang = form.get("to", to_lang)
         except Exception:
-            # Fallback: raw body
             raw = await req.body()
             text = raw.decode("utf-8", errors="ignore").strip()
 
@@ -140,49 +144,22 @@ async def websocket_endpoint(websocket: WebSocket):
     clients.add(websocket)
     try:
         while True:
-            # Accept both text and binary frames; normalize to str
-            msg = await websocket.receive()
-            if msg.get("type") == "websocket.disconnect":
-                break
-
-            data_text: Optional[str] = None
-            if "text" in msg and msg["text"] is not None:
-                data_text = msg["text"]
-            elif "bytes" in msg and msg["bytes"] is not None:
-                # Some clients/drivers can send binary; decode as UTF-8 if possible
-                try:
-                    data_text = msg["bytes"].decode("utf-8", errors="ignore")
-                except Exception:
-                    data_text = None
-
-            if not data_text:
-                continue  # ignore non-text messages
-
-            # Only forward JSON-looking payloads (what your UI sends)
-            if not data_text.lstrip().startswith("{"):
-                continue
-
+            data = await websocket.receive_text()
             dead: Set[WebSocket] = set()
-            for client in tuple(clients):
+            for client in list(clients):
                 if client is websocket:
                     continue
                 try:
-                    await client.send_text(data_text)
+                    await client.send_text(data)
                 except Exception:
                     dead.add(client)
             for d in dead:
-                try:
-                    await d.close()
-                except Exception:
-                    pass
                 clients.discard(d)
     except WebSocketDisconnect:
-        pass
-    finally:
+        clients.discard(websocket)
+    except Exception:
         clients.discard(websocket)
 
-# Optional: run locally
 if __name__ == "__main__":
     import uvicorn
-    # Bind to 0.0.0.0 so phones on your LAN can reach it via your machine's IP
-    uvicorn.run("translator_app:app", host="0.0.0.0", port=int(os.getenv("PORT", "8000")), reload=True)
+    uvicorn.run("translator_app:app", host="0.0.0.0", port=8000, reload=True)
